@@ -246,6 +246,70 @@ module.exports = function (event, context) {
       }
       break
 
+    case 'Alexa.ModeController':
+      if (name === 'SetMode') {
+        const modeValue = payload.mode
+        const modes = cookie.modes
+        
+        // Extract mode name from value (e.g., "Input.Bluray" -> "Bluray")
+        const modeName = modeValue.replace('Input.', '').replace(/_/g, ' ')
+        const modeIndex = modes.indexOf(modeName)
+        
+        if (modeIndex === -1) {
+          context.succeed(buildErrorResponse('ErrorResponse', 'Invalid mode'))
+          return
+        }
+        
+        // Level is index * 10
+        const level = modeIndex * 10
+        ctrlDev('dimmable', endpointId, level, function (callback) {
+          if (callback === 'Err') {
+            context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
+            return
+          }
+          const properties = [{
+            namespace: 'Alexa.ModeController',
+            instance: 'Input.Source',
+            name: 'mode',
+            value: modeValue,
+            timeOfSample: new Date().toISOString(),
+            uncertaintyInMilliseconds: 500
+          }]
+          context.succeed(buildResponse(properties))
+        })
+      } else if (name === 'AdjustMode') {
+        const modeDelta = payload.modeDelta
+        const modes = cookie.modes
+        
+        getDev(endpointId, 'light', function (currentLevel) {
+          const currentIndex = Math.round(parseInt(currentLevel) / 10)
+          let newIndex = currentIndex + modeDelta
+          
+          // Wrap around
+          if (newIndex < 0) newIndex = modes.length - 1
+          if (newIndex >= modes.length) newIndex = 0
+          
+          const level = newIndex * 10
+          ctrlDev('dimmable', endpointId, level, function (callback) {
+            if (callback === 'Err') {
+              context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
+              return
+            }
+            const modeValue = 'Input.' + modes[newIndex].replace(/[^a-zA-Z0-9]/g, '_')
+            const properties = [{
+              namespace: 'Alexa.ModeController',
+              instance: 'Input.Source',
+              name: 'mode',
+              value: modeValue,
+              timeOfSample: new Date().toISOString(),
+              uncertaintyInMilliseconds: 500
+            }]
+            context.succeed(buildResponse(properties))
+          })
+        })
+      }
+      break
+
     case 'Alexa':
       if (name === 'ReportState') {
         // Query current state of device
@@ -339,6 +403,30 @@ module.exports = function (event, context) {
                   namespace: 'Alexa.BrightnessController',
                   name: 'brightness',
                   value: level,
+                  timeOfSample: new Date().toISOString(),
+                  uncertaintyInMilliseconds: 500
+                })
+              }
+            }
+            context.succeed(buildResponse(properties))
+          })
+        } else if (what === 'selector') {
+          // Get current mode
+          getDev(endpointId, 'light', function (data) {
+            if (data !== 'Err') {
+              const level = parseInt(data)
+              const modeIndex = Math.round(level / 10)
+              const modes = cookie.modes
+              
+              if (modeIndex >= 0 && modeIndex < modes.length) {
+                const modeName = modes[modeIndex]
+                const modeValue = 'Input.' + modeName.replace(/[^a-zA-Z0-9]/g, '_')
+                
+                properties.push({
+                  namespace: 'Alexa.ModeController',
+                  instance: 'Input.Source',
+                  name: 'mode',
+                  value: modeValue,
                   timeOfSample: new Date().toISOString(),
                   uncertaintyInMilliseconds: 500
                 })

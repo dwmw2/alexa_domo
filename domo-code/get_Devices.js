@@ -97,70 +97,107 @@ module.exports = function (event, context, passBack) {
           }
           endpoints.push(endpoint)
         } else if (devType.startsWith('Light')) {
-          endpoint.displayCategories = ['LIGHT']
-          endpoint.capabilities = [
-            {
-              type: 'AlexaInterface',
-              interface: 'Alexa.PowerController',
-              version: '3',
-              properties: {
-                supported: [{ name: 'powerState' }],
-                proactivelyReported: false,
-                retrievable: true
+          // Check if this is a Selector switch (input selector, not a light)
+          if (setSwitch === 'Selector' && device.LevelNames) {
+            // Decode level names from base64
+            const levelNamesDecoded = Buffer.from(device.LevelNames, 'base64').toString('utf-8')
+            const modes = levelNamesDecoded.split('|')
+            
+            endpoint.displayCategories = ['OTHER']
+            endpoint.capabilities = [
+              {
+                type: 'AlexaInterface',
+                interface: 'Alexa.ModeController',
+                version: '3',
+                instance: 'Input.Source',
+                capabilityResources: {
+                  friendlyNames: [
+                    {
+                      '@type': 'text',
+                      value: {
+                        text: 'Input',
+                        locale: 'en-US'
+                      }
+                    }
+                  ]
+                },
+                properties: {
+                  supported: [{ name: 'mode' }],
+                  proactivelyReported: false,
+                  retrievable: true
+                },
+                configuration: {
+                  ordered: false,
+                  supportedModes: modes.map((mode, index) => ({
+                    value: 'Input.' + mode.replace(/[^a-zA-Z0-9]/g, '_'),
+                    modeResources: {
+                      friendlyNames: [
+                        {
+                          '@type': 'text',
+                          value: {
+                            text: mode,
+                            locale: 'en-US'
+                          }
+                        }
+                      ]
+                    }
+                  }))
+                }
+              },
+              {
+                type: 'AlexaInterface',
+                interface: 'Alexa',
+                version: '3'
               }
+            ]
+            endpoint.cookie = {
+              WhatAmI: 'selector',
+              modes: modes
             }
-          ]
-          
-          // Only add brightness control for dimmable lights
-          if (setSwitch === 'Dimmer' || setSwitch === 'Selector') {
+            endpoints.push(endpoint)
+          } else {
+            // Regular light
+            endpoint.displayCategories = ['LIGHT']
+            endpoint.capabilities = [
+              {
+                type: 'AlexaInterface',
+                interface: 'Alexa.PowerController',
+                version: '3',
+                properties: {
+                  supported: [{ name: 'powerState' }],
+                  proactivelyReported: false,
+                  retrievable: true
+                }
+              }
+            ]
+            
+            // Only add brightness control for dimmable lights
+            if (setSwitch === 'Dimmer') {
+              endpoint.capabilities.push({
+                type: 'AlexaInterface',
+                interface: 'Alexa.BrightnessController',
+                version: '3',
+                properties: {
+                  supported: [{ name: 'brightness' }],
+                  proactivelyReported: false,
+                  retrievable: true
+                }
+              })
+            }
+            
             endpoint.capabilities.push({
               type: 'AlexaInterface',
-              interface: 'Alexa.BrightnessController',
-              version: '3',
-              properties: {
-                supported: [{ name: 'brightness' }],
-                proactivelyReported: false,
-                retrievable: true
-              }
+              interface: 'Alexa',
+              version: '3'
             })
+            
+            endpoint.cookie = {
+              maxDimLevel: device.MaxDimLevel,
+              switchis: setSwitch,
+              WhatAmI: 'light'
+            }
+            endpoints.push(endpoint)
           }
-          
-          // Only add color control for RGB/RGBW lights
-          if (setSwitch === 'Selector' || device.SubType.includes('RGB')) {
-            endpoint.capabilities.push({
-              type: 'AlexaInterface',
-              interface: 'Alexa.ColorController',
-              version: '3',
-              properties: {
-                supported: [{ name: 'color' }],
-                proactivelyReported: false,
-                retrievable: true
-              }
-            })
-            endpoint.capabilities.push({
-              type: 'AlexaInterface',
-              interface: 'Alexa.ColorTemperatureController',
-              version: '3',
-              properties: {
-                supported: [{ name: 'colorTemperatureInKelvin' }],
-                proactivelyReported: false,
-                retrievable: true
-              }
-            })
-          }
-          
-          endpoint.capabilities.push({
-            type: 'AlexaInterface',
-            interface: 'Alexa',
-            version: '3'
-          })
-          
-          endpoint.cookie = {
-            maxDimLevel: device.MaxDimLevel,
-            switchis: setSwitch,
-            WhatAmI: 'light'
-          }
-          endpoints.push(endpoint)
         } else if (devType.startsWith('Blind') || devType.startsWith('RFY')) {
           endpoint.displayCategories = ['INTERIOR_BLIND']
           endpoint.capabilities = [
