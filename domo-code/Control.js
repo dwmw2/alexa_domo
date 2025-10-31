@@ -343,6 +343,14 @@ module.exports = function (event, context) {
         
         // Build response with scope
         const buildReportStateResponse = (props) => {
+          // Always include EndpointHealth
+          const allProps = props.concat([{
+            namespace: 'Alexa.EndpointHealth',
+            name: 'connectivity',
+            value: { value: 'OK' },
+            timeOfSample: new Date().toISOString(),
+            uncertaintyInMilliseconds: 0
+          }])
           return {
             event: {
               header: responseHeader,
@@ -353,7 +361,7 @@ module.exports = function (event, context) {
               payload: {}
             },
             context: {
-              properties: props
+              properties: allProps
             }
           }
         }
