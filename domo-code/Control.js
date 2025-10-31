@@ -277,11 +277,18 @@ module.exports = function (event, context) {
     case 'Alexa.ModeController':
       if (name === 'SetMode') {
         const modeValue = payload.mode
-        const modes = cookie.modes
         
-        // Extract mode name from value (e.g., "Input.Bluray" -> "Bluray")
-        const modeName = modeValue.replace('Input.', '').replace(/_/g, ' ')
-        const modeIndex = modes.indexOf(modeName)
+        // Decode modes from cookie
+        if (!cookie.levelNames) {
+          context.succeed(buildErrorResponse('ErrorResponse', 'Device configuration missing'))
+          return
+        }
+        
+        const levelNamesDecoded = Buffer.from(cookie.levelNames, 'base64').toString('utf-8')
+        const modes = levelNamesDecoded.split('|')
+        
+        // Extract mode name from value (e.g., "Input.Keptout" -> "Kept out")
+        const modeIndex = modes.findIndex(m => m.replace(/\s+/g, '') === modeValue.replace('Input.', ''))
         
         if (modeIndex === -1) {
           context.succeed(buildErrorResponse('ErrorResponse', 'Invalid mode'))
@@ -306,8 +313,6 @@ module.exports = function (event, context) {
           context.succeed(buildResponse(properties))
         })
       } else if (name === 'AdjustMode') {
-        const modeDelta = payload.modeDelta
-        const modes = cookie.modes
         
         getDev(deviceId, 'light', function (currentLevel) {
           const currentIndex = Math.round(parseInt(currentLevel) / 10)

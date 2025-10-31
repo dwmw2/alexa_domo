@@ -163,7 +163,9 @@ module.exports = function (event, context, passBack) {
                 version: '3'
               }
             ]
-            endpoint.cookie = {}
+            endpoint.cookie = {
+              levelNames: device.LevelNames
+            }
             endpoints.push(endpoint)
           } else {
             // Regular light
