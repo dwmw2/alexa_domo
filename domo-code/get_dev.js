@@ -50,6 +50,10 @@ module.exports = function (idx, devType, sendback) {
           // Extract numeric value from Data field (e.g., "53.755 kg" -> 53.755)
           const match = device.Data.match(/([0-9.]+)/)
           callBackString = match ? match[1] : '0'
+        } else if (devType === 'general') {
+          // Extract numeric value from Data field (e.g., "8.1 pH" -> 8.1, "95.5799%" -> 95.5799)
+          const match = device.Data.match(/([0-9.]+)/)
+          callBackString = match ? match[1] : '0'
         }
         sendback(callBackString)
       }

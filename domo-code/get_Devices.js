@@ -457,6 +457,130 @@ module.exports = function (event, context, passBack) {
             WhatAmI: 'weight'
           }
           endpoints.push(endpoint)
+        } else if (devType === 'General') {
+          // Determine what type of general sensor based on SubType or Data
+          const data = device.Data || ''
+          const subType = device.SubType
+          
+          if (subType === 'Percentage' && device.Name.toLowerCase().includes('battery')) {
+            // Battery percentage
+            endpoint.displayCategories = ['OTHER']
+            endpoint.capabilities = [
+              {
+                type: 'AlexaInterface',
+                interface: 'Alexa.PercentageController',
+                version: '3',
+                properties: {
+                  supported: [{ name: 'percentage' }],
+                  proactivelyReported: false,
+                  retrievable: true,
+                  nonControllable: true
+                }
+              },
+              {
+                type: 'AlexaInterface',
+                interface: 'Alexa',
+                version: '3'
+              }
+            ]
+            endpoint.cookie = {
+              WhatAmI: 'general',
+              unit: 'percentage'
+            }
+            endpoints.push(endpoint)
+          } else if (data.includes('pH')) {
+            // pH sensor
+            endpoint.displayCategories = ['OTHER']
+            endpoint.capabilities = [
+              {
+                type: 'AlexaInterface',
+                interface: 'Alexa.RangeController',
+                version: '3',
+                instance: 'Sensor.pH',
+                capabilityResources: {
+                  friendlyNames: [
+                    {
+                      '@type': 'text',
+                      value: {
+                        text: 'pH',
+                        locale: 'en-US'
+                      }
+                    }
+                  ]
+                },
+                properties: {
+                  supported: [{ name: 'rangeValue' }],
+                  proactivelyReported: false,
+                  retrievable: true,
+                  nonControllable: true
+                },
+                configuration: {
+                  supportedRange: {
+                    minimumValue: 0,
+                    maximumValue: 14,
+                    precision: 0.1
+                  }
+                }
+              },
+              {
+                type: 'AlexaInterface',
+                interface: 'Alexa',
+                version: '3'
+              }
+            ]
+            endpoint.cookie = {
+              WhatAmI: 'general',
+              unit: 'pH'
+            }
+            endpoints.push(endpoint)
+          } else if (data.includes('g/m³')) {
+            // Absolute humidity sensor
+            endpoint.displayCategories = ['OTHER']
+            endpoint.capabilities = [
+              {
+                type: 'AlexaInterface',
+                interface: 'Alexa.RangeController',
+                version: '3',
+                instance: 'Sensor.AbsoluteHumidity',
+                capabilityResources: {
+                  friendlyNames: [
+                    {
+                      '@type': 'text',
+                      value: {
+                        text: 'Absolute Humidity',
+                        locale: 'en-US'
+                      }
+                    }
+                  ]
+                },
+                properties: {
+                  supported: [{ name: 'rangeValue' }],
+                  proactivelyReported: false,
+                  retrievable: true,
+                  nonControllable: true
+                },
+                configuration: {
+                  supportedRange: {
+                    minimumValue: 0,
+                    maximumValue: 50,
+                    precision: 0.01
+                  },
+                  unitOfMeasure: 'Alexa.Unit.Density.GramsPerCubicMeter'
+                }
+              },
+              {
+                type: 'AlexaInterface',
+                interface: 'Alexa',
+                version: '3'
+              }
+            ]
+            endpoint.cookie = {
+              WhatAmI: 'general',
+              unit: 'g/m³'
+            }
+            endpoints.push(endpoint)
+          }
+          // Skip kWh and other general sensors
         }
       }
     }

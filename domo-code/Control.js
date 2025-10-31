@@ -449,6 +449,42 @@ module.exports = function (event, context) {
             }
             context.succeed(buildResponse(properties))
           })
+        } else if (what === 'general') {
+          // Get general sensor reading
+          getDev(endpointId, what, function (data) {
+            if (data !== 'Err') {
+              const value = parseFloat(data)
+              
+              if (cookie.unit === 'percentage') {
+                properties.push({
+                  namespace: 'Alexa.PercentageController',
+                  name: 'percentage',
+                  value: value,
+                  timeOfSample: new Date().toISOString(),
+                  uncertaintyInMilliseconds: 500
+                })
+              } else if (cookie.unit === 'pH') {
+                properties.push({
+                  namespace: 'Alexa.RangeController',
+                  instance: 'Sensor.pH',
+                  name: 'rangeValue',
+                  value: value,
+                  timeOfSample: new Date().toISOString(),
+                  uncertaintyInMilliseconds: 500
+                })
+              } else if (cookie.unit === 'g/m³') {
+                properties.push({
+                  namespace: 'Alexa.RangeController',
+                  instance: 'Sensor.AbsoluteHumidity',
+                  name: 'rangeValue',
+                  value: value,
+                  timeOfSample: new Date().toISOString(),
+                  uncertaintyInMilliseconds: 500
+                })
+              }
+            }
+            context.succeed(buildResponse(properties))
+          })
         } else {
           context.succeed(buildErrorResponse('ErrorResponse', 'State report not supported for this device'))
         }
