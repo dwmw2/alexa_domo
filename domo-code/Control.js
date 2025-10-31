@@ -261,13 +261,6 @@ module.exports = function (event, context) {
                 timeOfSample: new Date().toISOString(),
                 uncertaintyInMilliseconds: 500
               })
-              properties.push({
-                namespace: 'Alexa.ThermostatController',
-                name: 'thermostatMode',
-                value: 'HEAT',
-                timeOfSample: new Date().toISOString(),
-                uncertaintyInMilliseconds: 500
-              })
             }
             
             // If there's a linked temperature device, get its reading

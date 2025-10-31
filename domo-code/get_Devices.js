@@ -242,15 +242,10 @@ module.exports = function (event, context, passBack) {
               version: '3',
               properties: {
                 supported: [
-                  { name: 'targetSetpoint' },
-                  { name: 'thermostatMode' }
+                  { name: 'targetSetpoint' }
                 ],
                 proactivelyReported: false,
                 retrievable: true
-              },
-              configuration: {
-                supportedModes: ['HEAT', 'COOL', 'AUTO'],
-                supportsScheduling: false
               }
             }
           ]
