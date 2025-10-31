@@ -1,6 +1,6 @@
 'use strict'
 
-let Domoticz = require('../node_modules/domoticz-api/api/domoticz')
+let Domoticz = require('./domoticz')
 
 let conf = require('../conf.json')
 let api = new Domoticz({
@@ -16,8 +16,8 @@ module.exports = function (idx, func, sendback) {
   api.changeSceneState({
     idx: idx,
     state: func
-  }, function (params, device) {
-    if (device.status === 'OK') {
+  }, function (err, device) {
+    if (!err && device.status === 'OK') {
       payloads = {}
     }
     else {

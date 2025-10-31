@@ -1,6 +1,6 @@
 'use strict'
 
-let Domoticz = require('../node_modules/domoticz-api/api/domoticz')
+let Domoticz = require('./domoticz')
 
 let conf = require('../conf.json')
 let api = new Domoticz({
@@ -15,9 +15,9 @@ module.exports = function (idx, kelvin, sendback) {
   api.Kelvin({
     idx: idx,
     kelvin: kelvin
-  }, function (params, device) {
+  }, function (err, device) {
     let payload
-    if (device.status === 'OK') {
+    if (!err && device.status === 'OK') {
       let payload = {
         achievedState: {
           colorTemperature: {

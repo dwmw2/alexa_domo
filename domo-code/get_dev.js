@@ -1,6 +1,6 @@
 'use strict'
 
-let Domoticz = require('../node_modules/domoticz-api/api/domoticz')
+let Domoticz = require('./domoticz')
 
 let conf = require('../conf.json')
 let api = new Domoticz({
@@ -16,34 +16,36 @@ module.exports = function (idx, devType, sendback) {
   let intRet
   api.getDevice({
     idx: idx
-  }, function (params, callback) {
-    let devArray = callback.results
+  }, function (err, data) {
+    if (err) return sendback(null)
+    
+    let devArray = data.result
     if (devArray) {
             // turn this on to check the list of values the device returns
        console.log("device list", devArray)
       for (let i = 0; i < devArray.length; i++) {
         let device = devArray[i]
-        let devName = device.name
-        if (device.description !== '') {
+        let devName = device.Name
+        if (device.Description !== '') {
           let regex = /Alexa_Name:\s*(.+)/im
-          let match = regex.exec(device.description)
+          let match = regex.exec(device.Description)
           if (match !== null) {
             devName = match[1].trim()
           }
         }
         let callBackString = {}
         if (devType === 'temp') {
-          if (device.subType === 'SetPoint') {
-            intRet = device.setPoint
+          if (device.SubType === 'SetPoint') {
+            intRet = device.SetPoint
           } else {
-            intRet = device.temp
+            intRet = device.Temp
           }
           callBackString.value1 = intRet
           callBackString.value2 = devName
         } else if (devType === 'light') {
-          callBackString = device.level
+          callBackString = device.Level
         } else if (devType === 'lock') {
-          callBackString = device.state
+          callBackString = device.Status
         }
         sendback(callBackString)
       }

@@ -1,7 +1,7 @@
 /* eslint-disable max-len */
 'use strict'
 
-const Domoticz = require('../node_modules/domoticz-api/api/domoticz')
+const Domoticz = require('./domoticz')
 
 const conf = require('../conf.json')
 const api = new Domoticz({
@@ -20,26 +20,26 @@ module.exports = function (event, context, passBack) {
   const responseName = 'DiscoverAppliancesResponse'
   const headers = makeHeader(event, responseName)
 //  lets get the devices from Domoticz:
-  api.getDevices({}, function (error, devices) {
-    if (error) {
-      log('error:', error)
+  api.getDevices({}, function (err, devices) {
+    if (err) {
+      log('error:', err)
       handleError(event, context, 'TargetBridgeConnectivityUnstableError')
       return
     }
-    const devArray = devices.results
+    const devArray = devices.result
     if (devArray) {
       for (let i = 0; i < devArray.length; i++) {
         const device = devArray[i]
         //log('device detail is: ', device)
                 // Omit devices which aren't in a room plan
-       if (device.planID === '0' || device.planID === '') { continue }
+       if (device.PlanID === '0' || device.PlanID === '') { continue }
 
-        const devType = device.type
+        const devType = device.Type
 
         let setSwitch
 
-        if (device.switchType !== null){
-          setSwitch = device.switchType
+        if (device.SwitchType !== null){
+          setSwitch = device.SwitchType
         }
         log('empty payload: ', appliances)
 

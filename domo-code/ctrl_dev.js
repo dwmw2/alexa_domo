@@ -1,6 +1,6 @@
 'use strict'
 
-let Domoticz = require('../node_modules/domoticz-api/api/domoticz')
+let Domoticz = require('./domoticz')
 
 let conf = require('../conf.json')
 let api = new Domoticz({
@@ -17,9 +17,9 @@ module.exports = function (switchtype, applianceId, func, sendback) {
     type: switchtype,
     idx: applianceId,
     state: func
-  }, function (params, device) {
+  }, function (err, device) {
     console.log(device)
-    if (device.status === 'OK') {
+    if (!err && device.status === 'OK') {
       payload = {}
     }
     else {
