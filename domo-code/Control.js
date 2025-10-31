@@ -278,25 +278,14 @@ module.exports = function (event, context) {
       if (name === 'SetMode') {
         const modeValue = payload.mode
         
-        // Decode modes from cookie
-        if (!cookie.levelNames) {
-          context.succeed(buildErrorResponse('ErrorResponse', 'Device configuration missing'))
-          return
-        }
+        // Extract level from value (e.g., "Level.20" -> 20)
+        const level = parseInt(modeValue.replace('Level.', ''))
         
-        const levelNamesDecoded = Buffer.from(cookie.levelNames, 'base64').toString('utf-8')
-        const modes = levelNamesDecoded.split('|')
-        
-        // Extract mode name from value (e.g., "Input.Keptout" -> "Kept out")
-        const modeIndex = modes.findIndex(m => m.replace(/\s+/g, '') === modeValue.replace('Input.', ''))
-        
-        if (modeIndex === -1) {
+        if (isNaN(level)) {
           context.succeed(buildErrorResponse('ErrorResponse', 'Invalid mode'))
           return
         }
         
-        // Level is index * 10
-        const level = modeIndex * 10
         ctrlDev('dimmable', deviceId, level, function (callback) {
           if (callback === 'Err') {
             context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))

@@ -163,7 +163,7 @@ module.exports = function (event, context, passBack) {
                 configuration: {
                   ordered: false,
                   supportedModes: modes.map((mode, index) => ({
-                    value: 'Input.' + mode.replace(/[^a-zA-Z0-9]/g, '_'),
+                    value: 'Level.' + (index * 10),
                     modeResources: {
                       friendlyNames: [
                         {
@@ -184,9 +184,7 @@ module.exports = function (event, context, passBack) {
                 version: '3'
               }
             ]
-            endpoint.cookie = {
-              levelNames: device.LevelNames
-            }
+            endpoint.cookie = {}
             endpoints.push(endpoint)
           } else {
             // Regular light
