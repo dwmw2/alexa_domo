@@ -4,8 +4,24 @@ let handleDiscovery = require('./domo-code/Discovery')
 
 // Lambda handler for Alexa Smart Home API v3
 let func = function (event, context) {
-  // v3 API uses event.directive.header, v2 uses event.header
-  const header = event.directive ? event.directive.header : event.header
+  // Normalize event structure - ensure we have directive format for v3
+  let normalizedEvent = event
+  
+  // If event doesn't have directive but has header (v2 format), wrap it
+  if (!event.directive && event.header) {
+    normalizedEvent = {
+      directive: {
+        header: event.header,
+        endpoint: event.payload && event.payload.appliance ? {
+          endpointId: event.payload.appliance.applianceId,
+          cookie: event.payload.appliance.additionalApplianceDetails
+        } : {},
+        payload: event.payload || {}
+      }
+    }
+  }
+  
+  const header = normalizedEvent.directive ? normalizedEvent.directive.header : normalizedEvent.header
   
   if (!header || !header.namespace) {
     console.log('Error: Invalid event structure', JSON.stringify(event))
@@ -17,16 +33,16 @@ let func = function (event, context) {
   
   // Handle v3 API
   if (namespace === 'Alexa.Discovery') {
-    handleDiscovery(event, context)
+    handleDiscovery(normalizedEvent, context)
   } else if (namespace.startsWith('Alexa')) {
     // All other Alexa.* namespaces are control/query operations
-    handleControl(event, context)
+    handleControl(normalizedEvent, context)
   } 
   // Handle legacy v2 API (for backwards compatibility)
   else if (namespace === 'Alexa.ConnectedHome.Discovery') {
-    handleDiscovery(event, context)
+    handleDiscovery(normalizedEvent, context)
   } else if (namespace === 'Alexa.ConnectedHome.Control' || namespace === 'Alexa.ConnectedHome.Query') {
-    handleControl(event, context)
+    handleControl(normalizedEvent, context)
   } 
   else {
     console.log('Error: Unsupported namespace:', namespace)
