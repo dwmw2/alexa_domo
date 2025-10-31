@@ -233,7 +233,7 @@ module.exports = function (event, context, passBack) {
             WhatAmI: 'humidity'
           }
           endpoints.push(endpoint)
-        } else if (devType.startsWith('Temp') || devType.startsWith('Therm')) {
+        } else if (devType === 'Thermostat') {
           endpoint.displayCategories = ['THERMOSTAT']
           endpoint.capabilities = [
             {
@@ -252,7 +252,54 @@ module.exports = function (event, context, passBack) {
                 supportedModes: ['HEAT', 'COOL', 'AUTO'],
                 supportsScheduling: false
               }
-            },
+            }
+          ]
+          
+          // Check if device has temperature reading or find related temperature device
+          let hasTemp = device.Temp !== undefined
+          let tempDeviceIdx = null
+          
+          if (!hasTemp) {
+            // Try to find related temperature device by name
+            const baseName = device.Name.replace(/\s+(Setpoint|SetPoint)$/i, '')
+            const tempDevice = devArray.find(d => 
+              d.Name === baseName + ' Temperature' && 
+              d.Type.startsWith('Temp') &&
+              d.PlanID !== '0' && d.PlanID !== ''
+            )
+            if (tempDevice) {
+              hasTemp = true
+              tempDeviceIdx = tempDevice.idx
+            }
+          }
+          
+          if (hasTemp) {
+            endpoint.capabilities.push({
+              type: 'AlexaInterface',
+              interface: 'Alexa.TemperatureSensor',
+              version: '3',
+              properties: {
+                supported: [{ name: 'temperature' }],
+                proactivelyReported: false,
+                retrievable: true
+              }
+            })
+          }
+          
+          endpoint.capabilities.push({
+            type: 'AlexaInterface',
+            interface: 'Alexa',
+            version: '3'
+          })
+          
+          endpoint.cookie = {
+            WhatAmI: 'temp',
+            tempDeviceIdx: tempDeviceIdx
+          }
+          endpoints.push(endpoint)
+        } else if (devType.startsWith('Temp')) {
+          endpoint.displayCategories = ['TEMPERATURE_SENSOR']
+          endpoint.capabilities = [
             {
               type: 'AlexaInterface',
               interface: 'Alexa.TemperatureSensor',
