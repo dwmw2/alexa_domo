@@ -599,20 +599,11 @@ module.exports = function (event, context, passBack) {
     
     console.log('Discovery complete:', endpoints.length, 'endpoints created')
     
-    // Filter out RangeController for now
-    const filteredEndpoints = endpoints.filter(e => {
-      const hasRangeController = e.capabilities.some(c => 
-        c.interface === 'Alexa.RangeController'
-      )
-      return !hasRangeController
-    })
-    console.log('Filtered to', filteredEndpoints.length, 'endpoints (excluded RangeController)')
-    
     const result = {
       event: {
         header: headers,
         payload: {
-          endpoints: filteredEndpoints
+          endpoints: endpoints
         }
       }
     }
