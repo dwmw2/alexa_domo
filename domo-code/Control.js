@@ -28,6 +28,9 @@ module.exports = function (event, context) {
   const what = cookie.WhatAmI
   const switchtype = cookie.switchis
   const maxDimLevel = cookie.maxDimLevel
+  
+  // Strip prefix for actual device ID
+  const deviceId = endpointId.replace(/^(selector_|scene_)/, '')
 
   const namespace = header.namespace
   const name = header.name
@@ -85,7 +88,7 @@ module.exports = function (event, context) {
           context.succeed(buildResponse(properties))
         })
       } else {
-        ctrlDev('switch', endpointId, funcName, function (callback) {
+        ctrlDev('switch', deviceId, funcName, function (callback) {
           if (callback === 'Err') {
             context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
             return
@@ -106,7 +109,7 @@ module.exports = function (event, context) {
       if (name === 'SetBrightness') {
         let brightness = payload.brightness
         let dimLevel = brightness / (100 / maxDimLevel)
-        ctrlDev('dimmable', endpointId, dimLevel, function (callback) {
+        ctrlDev('dimmable', deviceId, dimLevel, function (callback) {
           if (callback === 'Err') {
             context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
             return
@@ -122,11 +125,11 @@ module.exports = function (event, context) {
         })
       } else if (name === 'AdjustBrightness') {
         let delta = payload.brightnessDelta
-        getDev(endpointId, what, function (returnme) {
+        getDev(deviceId, what, function (returnme) {
           let current = parseInt(returnme)
           let newBrightness = Math.max(0, Math.min(100, current + delta))
           let dimLevel = newBrightness / (100 / maxDimLevel)
-          ctrlDev('dimmable', endpointId, dimLevel, function (callback) {
+          ctrlDev('dimmable', deviceId, dimLevel, function (callback) {
             if (callback === 'Err') {
               context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
               return
@@ -212,7 +215,7 @@ module.exports = function (event, context) {
     case 'Alexa.LockController':
       if (name === 'Lock' || name === 'Unlock') {
         let lockFunc = name === 'Lock' ? 'On' : 'Off'
-        ctrlDev(switchtype, endpointId, lockFunc, function (callback) {
+        ctrlDev(switchtype, deviceId, lockFunc, function (callback) {
           if (callback === 'Err') {
             context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
             return
@@ -287,7 +290,7 @@ module.exports = function (event, context) {
         
         // Level is index * 10
         const level = modeIndex * 10
-        ctrlDev('dimmable', endpointId, level, function (callback) {
+        ctrlDev('dimmable', deviceId, level, function (callback) {
           if (callback === 'Err') {
             context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
             return
@@ -306,7 +309,7 @@ module.exports = function (event, context) {
         const modeDelta = payload.modeDelta
         const modes = cookie.modes
         
-        getDev(endpointId, 'light', function (currentLevel) {
+        getDev(deviceId, 'light', function (currentLevel) {
           const currentIndex = Math.round(parseInt(currentLevel) / 10)
           let newIndex = currentIndex + modeDelta
           
@@ -315,7 +318,7 @@ module.exports = function (event, context) {
           if (newIndex >= modes.length) newIndex = 0
           
           const level = newIndex * 10
-          ctrlDev('dimmable', endpointId, level, function (callback) {
+          ctrlDev('dimmable', deviceId, level, function (callback) {
             if (callback === 'Err') {
               context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
               return
@@ -405,7 +408,7 @@ module.exports = function (event, context) {
             })
           } else {
             // Standalone temperature sensor
-            getDev(endpointId, 'temp', function (tempData) {
+            getDev(deviceId, 'temp', function (tempData) {
               if (tempData !== 'Err' && tempData.value1 !== undefined) {
                 properties.push({
                   namespace: 'Alexa.TemperatureSensor',
@@ -420,7 +423,7 @@ module.exports = function (event, context) {
           }
         } else if (what === 'humidity') {
           // Get temperature and/or humidity
-          getDev(endpointId, what, function (data) {
+          getDev(deviceId, what, function (data) {
             if (data !== 'Err' && data.value1) {
               properties.push({
                 namespace: 'Alexa.TemperatureSensor',
@@ -443,7 +446,7 @@ module.exports = function (event, context) {
           })
         } else if (what === 'light') {
           // Get power state and brightness
-          getDev(endpointId, what, function (data) {
+          getDev(deviceId, what, function (data) {
             if (data !== 'Err') {
               const level = parseInt(data)
               properties.push({
@@ -467,7 +470,7 @@ module.exports = function (event, context) {
           })
         } else if (what === 'selector') {
           // Get current mode
-          getDev(endpointId, 'light', function (data) {
+          getDev(deviceId, 'light', function (data) {
             if (data !== 'Err') {
               const level = parseInt(data)
               const modeIndex = Math.round(level / 10)
@@ -491,7 +494,7 @@ module.exports = function (event, context) {
           })
         } else if (what === 'weight') {
           // Get weight reading
-          getDev(endpointId, what, function (data) {
+          getDev(deviceId, what, function (data) {
             if (data !== 'Err') {
               properties.push({
                 namespace: 'Alexa.RangeController',
@@ -506,7 +509,7 @@ module.exports = function (event, context) {
           })
         } else if (what === 'general') {
           // Get general sensor reading
-          getDev(endpointId, what, function (data) {
+          getDev(deviceId, what, function (data) {
             if (data !== 'Err') {
               const value = parseFloat(data)
               

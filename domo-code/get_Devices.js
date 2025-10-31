@@ -114,6 +114,8 @@ module.exports = function (event, context, passBack) {
             const levelNamesDecoded = Buffer.from(device.LevelNames, 'base64').toString('utf-8')
             const modes = levelNamesDecoded.split('|')
             
+            // Use unique prefix to avoid ID conflicts
+            endpoint.endpointId = 'selector_' + device.idx
             endpoint.displayCategories = ['OTHER']
             endpoint.capabilities = [
               {
@@ -140,7 +142,7 @@ module.exports = function (event, context, passBack) {
                 configuration: {
                   ordered: false,
                   supportedModes: modes.map((mode, index) => ({
-                    value: 'Input.' + mode.replace(/[^a-zA-Z0-9]/g, '_'),
+                    value: 'Input.' + mode.replace(/\s+/g, ''),
                     modeResources: {
                       friendlyNames: [
                         {
@@ -161,10 +163,7 @@ module.exports = function (event, context, passBack) {
                 version: '3'
               }
             ]
-            endpoint.cookie = {
-              WhatAmI: 'selector',
-              modes: modes
-            }
+            endpoint.cookie = {}
             endpoints.push(endpoint)
           } else {
             // Regular light
@@ -598,14 +597,14 @@ module.exports = function (event, context, passBack) {
     
     console.log('Discovery complete:', endpoints.length, 'endpoints created')
     
-    // Filter out ModeController for now (selector switches)
+    // Filter out RangeController for now
     const filteredEndpoints = endpoints.filter(e => {
-      const hasModeController = e.capabilities.some(c => 
-        c.interface === 'Alexa.ModeController'
+      const hasRangeController = e.capabilities.some(c => 
+        c.interface === 'Alexa.RangeController'
       )
-      return !hasModeController
+      return !hasRangeController
     })
-    console.log('Filtered to', filteredEndpoints.length, 'endpoints (excluded ModeController)')
+    console.log('Filtered to', filteredEndpoints.length, 'endpoints (excluded RangeController)')
     
     const result = {
       event: {
