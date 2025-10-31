@@ -339,9 +339,8 @@ module.exports = function (event, context) {
       if (name === 'ReportState') {
         // Query current state of device
         const properties = []
-        const scope = directive.endpoint.scope // Preserve the scope from request
         
-        // Build response with scope
+        // Build response - mirror endpoint from request like Home Assistant does
         const buildReportStateResponse = (props) => {
           // Always include EndpointHealth
           const allProps = props.concat([{
@@ -354,10 +353,7 @@ module.exports = function (event, context) {
           return {
             event: {
               header: responseHeader,
-              endpoint: {
-                scope: scope,
-                endpointId: endpointId
-              },
+              endpoint: directive.endpoint, // Copy entire endpoint from request
               payload: {}
             },
             context: {
