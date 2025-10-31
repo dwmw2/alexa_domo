@@ -143,14 +143,21 @@ module.exports = function (event, context, passBack) {
                 type: 'AlexaInterface',
                 interface: 'Alexa.ModeController',
                 version: '3',
-                instance: 'Input.Source',
+                instance: device.Name.replace(/[^a-zA-Z0-9]/g, '') + '.Mode',
                 capabilityResources: {
                   friendlyNames: [
                     {
                       '@type': 'text',
                       value: {
-                        text: 'Input',
+                        text: device.Name,
                         locale: 'en-US'
+                      }
+                    },
+                    {
+                      '@type': 'text',
+                      value: {
+                        text: device.Name,
+                        locale: 'en-GB'
                       }
                     }
                   ]
@@ -162,20 +169,49 @@ module.exports = function (event, context, passBack) {
                 },
                 configuration: {
                   ordered: false,
-                  supportedModes: modes.map((mode, index) => ({
-                    value: 'Level.' + (index * 10),
-                    modeResources: {
-                      friendlyNames: [
-                        {
-                          '@type': 'text',
-                          value: {
-                            text: mode,
-                            locale: 'en-US'
-                          }
+                  supportedModes: modes.map((mode, index) => {
+                    const friendlyNames = [
+                      {
+                        '@type': 'text',
+                        value: {
+                          text: mode,
+                          locale: 'en-US'
                         }
-                      ]
+                      },
+                      {
+                        '@type': 'text',
+                        value: {
+                          text: mode,
+                          locale: 'en-GB'
+                        }
+                      }
+                    ]
+                    
+                    // Add homophone alias for better voice recognition
+                    if (mode === 'Allowed out') {
+                      friendlyNames.push({
+                        '@type': 'text',
+                        value: {
+                          text: 'Aloud out',
+                          locale: 'en-US'
+                        }
+                      })
+                      friendlyNames.push({
+                        '@type': 'text',
+                        value: {
+                          text: 'Aloud out',
+                          locale: 'en-GB'
+                        }
+                      })
                     }
-                  }))
+                    
+                    return {
+                      value: 'Level.' + (index * 10),
+                      modeResources: {
+                        friendlyNames: friendlyNames
+                      }
+                    }
+                  })
                 }
               },
               {
@@ -184,7 +220,10 @@ module.exports = function (event, context, passBack) {
                 version: '3'
               }
             ]
-            endpoint.cookie = {}
+            endpoint.cookie = {
+              WhatAmI: 'selector',
+              deviceName: device.Name
+            }
             endpoints.push(endpoint)
           } else {
             // Regular light

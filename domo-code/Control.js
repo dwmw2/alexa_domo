@@ -349,8 +349,11 @@ module.exports = function (event, context) {
           }])
           return {
             event: {
-              header: responseHeader,
-              endpoint: directive.endpoint, // Copy entire endpoint from request
+              header: makeHeader(directive, 'StateReport', 'Alexa'),
+              endpoint: {
+                endpointId: endpointId,
+                cookie: cookie
+              },
               payload: {}
             },
             context: {
@@ -467,16 +470,22 @@ module.exports = function (event, context) {
           getDev(deviceId, 'light', function (data) {
             if (data !== 'Err') {
               const level = parseInt(data)
+              const deviceName = cookie.deviceName || 'Device'
+              const instance = deviceName.replace(/[^a-zA-Z0-9]/g, '') + '.Mode'
               properties.push({
                 namespace: 'Alexa.ModeController',
-                instance: 'Input.Source',
+                instance: instance,
                 name: 'mode',
                 value: 'Level.' + level,
                 timeOfSample: new Date().toISOString(),
                 uncertaintyInMilliseconds: 500
               })
+              const response = buildReportStateResponse(properties)
+              console.log('StateReport response:', JSON.stringify(response, null, 2))
+              context.succeed(response)
+            } else {
+              context.succeed(buildReportStateResponse(properties))
             }
-            context.succeed(buildReportStateResponse(properties))
           })
         } else if (what === 'weight') {
           // Get weight reading
