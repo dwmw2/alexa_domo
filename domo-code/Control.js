@@ -244,6 +244,103 @@ module.exports = function (event, context) {
       }
       break
 
+    case 'Alexa':
+      if (name === 'ReportState') {
+        // Query current state of device
+        const properties = []
+        
+        // Check what capabilities this device has based on cookie
+        if (what === 'temp') {
+          // Get setpoint for thermostat
+          getDev(endpointId, what, function (setpointData) {
+            if (setpointData !== 'Err' && setpointData.value1 !== undefined) {
+              properties.push({
+                namespace: 'Alexa.ThermostatController',
+                name: 'targetSetpoint',
+                value: { value: parseFloat(setpointData.value1), scale: 'CELSIUS' },
+                timeOfSample: new Date().toISOString(),
+                uncertaintyInMilliseconds: 500
+              })
+              properties.push({
+                namespace: 'Alexa.ThermostatController',
+                name: 'thermostatMode',
+                value: 'HEAT',
+                timeOfSample: new Date().toISOString(),
+                uncertaintyInMilliseconds: 500
+              })
+            }
+            
+            // If there's a linked temperature device, get its reading
+            if (cookie.tempDeviceIdx) {
+              getDev(cookie.tempDeviceIdx, 'temp', function (tempData) {
+                if (tempData !== 'Err' && tempData.value1 !== undefined) {
+                  properties.push({
+                    namespace: 'Alexa.TemperatureSensor',
+                    name: 'temperature',
+                    value: { value: parseFloat(tempData.value1), scale: 'CELSIUS' },
+                    timeOfSample: new Date().toISOString(),
+                    uncertaintyInMilliseconds: 500
+                  })
+                }
+                context.succeed(buildResponse(properties))
+              })
+            } else {
+              context.succeed(buildResponse(properties))
+            }
+          })
+        } else if (what === 'humidity') {
+          // Get temperature and/or humidity
+          getDev(endpointId, what, function (data) {
+            if (data !== 'Err' && data.value1) {
+              properties.push({
+                namespace: 'Alexa.TemperatureSensor',
+                name: 'temperature',
+                value: { value: parseFloat(data.value1), scale: 'CELSIUS' },
+                timeOfSample: new Date().toISOString(),
+                uncertaintyInMilliseconds: 500
+              })
+            }
+            if (data !== 'Err' && data.value2) {
+              properties.push({
+                namespace: 'Alexa.HumiditySensor',
+                name: 'humidity',
+                value: parseInt(data.value2),
+                timeOfSample: new Date().toISOString(),
+                uncertaintyInMilliseconds: 500
+              })
+            }
+            context.succeed(buildResponse(properties))
+          })
+        } else if (what === 'light') {
+          // Get power state and brightness
+          getDev(endpointId, what, function (data) {
+            if (data !== 'Err') {
+              const level = parseInt(data)
+              properties.push({
+                namespace: 'Alexa.PowerController',
+                name: 'powerState',
+                value: level > 0 ? 'ON' : 'OFF',
+                timeOfSample: new Date().toISOString(),
+                uncertaintyInMilliseconds: 500
+              })
+              if (maxDimLevel) {
+                properties.push({
+                  namespace: 'Alexa.BrightnessController',
+                  name: 'brightness',
+                  value: level,
+                  timeOfSample: new Date().toISOString(),
+                  uncertaintyInMilliseconds: 500
+                })
+              }
+            }
+            context.succeed(buildResponse(properties))
+          })
+        } else {
+          context.succeed(buildErrorResponse('ErrorResponse', 'State report not supported for this device'))
+        }
+      }
+      break
+
     default:
       context.succeed(buildErrorResponse('ErrorResponse', 'Unsupported directive'))
   }
