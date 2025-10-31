@@ -80,28 +80,49 @@ module.exports = function (event, context, passBack) {
         if (devType.startsWith('Scene') || devType.startsWith('Group')) {
           endpoint.endpointId = 'scene_' + device.idx
           endpoint.manufacturerName = 'Domoticz'
-          endpoint.displayCategories = ['SWITCH']
-          endpoint.capabilities = [
-            {
-              type: 'AlexaInterface',
-              interface: 'Alexa.PowerController',
-              version: '3',
-              properties: {
-                supported: [
-                  {
-                    name: 'powerState'
-                  }
-                ],
-                proactivelyReported: false,
-                retrievable: true
+          
+          if (devType.startsWith('Scene')) {
+            // Scenes can only be activated, not deactivated
+            endpoint.displayCategories = ['SCENE_TRIGGER']
+            endpoint.capabilities = [
+              {
+                type: 'AlexaInterface',
+                interface: 'Alexa.SceneController',
+                version: '3',
+                supportsDeactivation: false
+              },
+              {
+                type: 'AlexaInterface',
+                interface: 'Alexa',
+                version: '3'
               }
-            },
-            {
-              type: 'AlexaInterface',
-              interface: 'Alexa',
-              version: '3'
-            }
-          ]
+            ]
+          } else {
+            // Groups can be turned on and off
+            endpoint.displayCategories = ['SWITCH']
+            endpoint.capabilities = [
+              {
+                type: 'AlexaInterface',
+                interface: 'Alexa.PowerController',
+                version: '3',
+                properties: {
+                  supported: [
+                    {
+                      name: 'powerState'
+                    }
+                  ],
+                  proactivelyReported: false,
+                  retrievable: true
+                }
+              },
+              {
+                type: 'AlexaInterface',
+                interface: 'Alexa',
+                version: '3'
+              }
+            ]
+          }
+          
           endpoint.cookie = {
             WhatAmI: 'scene',
             SceneIDX: device.idx

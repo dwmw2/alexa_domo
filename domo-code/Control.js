@@ -190,7 +190,7 @@ module.exports = function (event, context) {
       break
 
     case 'Alexa.SceneController':
-      let sceneIdx = parseInt(cookie.SceneIDX) - 200
+      let sceneIdx = cookie.SceneIDX
       ctrlScene(sceneIdx, 'On', function (callback) {
         if (callback === 'Err') {
           context.succeed(buildErrorResponse('ErrorResponse', 'Scene activation failed'))
