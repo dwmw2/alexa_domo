@@ -467,22 +467,14 @@ module.exports = function (event, context) {
           getDev(deviceId, 'light', function (data) {
             if (data !== 'Err') {
               const level = parseInt(data)
-              const modeIndex = Math.round(level / 10)
-              const modes = cookie.modes
-              
-              if (modeIndex >= 0 && modeIndex < modes.length) {
-                const modeName = modes[modeIndex]
-                const modeValue = 'Input.' + modeName.replace(/[^a-zA-Z0-9]/g, '_')
-                
-                properties.push({
-                  namespace: 'Alexa.ModeController',
-                  instance: 'Input.Source',
-                  name: 'mode',
-                  value: modeValue,
-                  timeOfSample: new Date().toISOString(),
-                  uncertaintyInMilliseconds: 500
-                })
-              }
+              properties.push({
+                namespace: 'Alexa.ModeController',
+                instance: 'Input.Source',
+                name: 'mode',
+                value: 'Level.' + level,
+                timeOfSample: new Date().toISOString(),
+                uncertaintyInMilliseconds: 500
+              })
             }
             context.succeed(buildReportStateResponse(properties))
           })
