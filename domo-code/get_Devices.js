@@ -21,10 +21,12 @@ module.exports = function (event, context, passBack) {
   
   api.getDevices({}, function (err, devices) {
     if (err) {
+      console.log('Error fetching devices from Domoticz:', err)
       log('error:', err)
       handleError(event, context, 'TargetBridgeConnectivityUnstableError')
       return
     }
+    console.log('Fetched', devices.result.length, 'devices from Domoticz')
     const devArray = devices.result
     const linkedDevices = new Set() // Track devices that are linked and should be hidden
     
@@ -68,7 +70,7 @@ module.exports = function (event, context, passBack) {
 
         let endpoint = {
           endpointId: device.idx,
-          manufacturerName: device.HardwareName,
+          manufacturerName: device.HardwareName || 'Domoticz',
           friendlyName: devName,
           description: devType,
           displayCategories: [],
@@ -77,13 +79,22 @@ module.exports = function (event, context, passBack) {
 
         if (devType.startsWith('Scene') || devType.startsWith('Group')) {
           endpoint.endpointId = 'scene_' + device.idx
-          endpoint.displayCategories = ['SCENE_TRIGGER']
+          endpoint.manufacturerName = 'Domoticz'
+          endpoint.displayCategories = ['SWITCH']
           endpoint.capabilities = [
             {
               type: 'AlexaInterface',
-              interface: 'Alexa.SceneController',
+              interface: 'Alexa.PowerController',
               version: '3',
-              supportsDeactivation: false
+              properties: {
+                supported: [
+                  {
+                    name: 'powerState'
+                  }
+                ],
+                proactivelyReported: false,
+                retrievable: true
+              }
             },
             {
               type: 'AlexaInterface',
@@ -93,7 +104,7 @@ module.exports = function (event, context, passBack) {
           ]
           endpoint.cookie = {
             WhatAmI: 'scene',
-            SceneIDX: parseInt(device.idx) + 200
+            SceneIDX: device.idx
           }
           endpoints.push(endpoint)
         } else if (devType.startsWith('Light')) {
@@ -585,11 +596,23 @@ module.exports = function (event, context, passBack) {
       }
     }
     
+    console.log('Discovery complete:', endpoints.length, 'endpoints created')
+    
+    // Filter to basic device types: lights, scenes, thermostats, temp/humidity sensors
+    const filteredEndpoints = endpoints.filter(e => {
+      const hasComplexController = e.capabilities.some(c => 
+        c.interface === 'Alexa.ModeController' || 
+        c.interface === 'Alexa.RangeController'
+      )
+      return !hasComplexController
+    })
+    console.log('Filtered to', filteredEndpoints.length, 'basic endpoints')
+    
     const result = {
       event: {
         header: headers,
         payload: {
-          endpoints: endpoints
+          endpoints: filteredEndpoints
         }
       }
     }

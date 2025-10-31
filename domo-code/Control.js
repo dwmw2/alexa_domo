@@ -17,6 +17,12 @@ module.exports = function (event, context) {
   const endpoint = directive.endpoint
   const payload = directive.payload
   
+  if (!endpoint) {
+    console.log('Error: No endpoint in directive')
+    context.fail('No endpoint specified')
+    return
+  }
+  
   const endpointId = endpoint.endpointId
   const cookie = endpoint.cookie || {}
   const what = cookie.WhatAmI
@@ -61,20 +67,39 @@ module.exports = function (event, context) {
   switch (namespace) {
     case 'Alexa.PowerController':
       let funcName = name === 'TurnOn' ? 'On' : 'Off'
-      ctrlDev('switch', endpointId, funcName, function (callback) {
-        if (callback === 'Err') {
-          context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
-          return
-        }
-        const properties = [{
-          namespace: 'Alexa.PowerController',
-          name: 'powerState',
-          value: name === 'TurnOn' ? 'ON' : 'OFF',
-          timeOfSample: new Date().toISOString(),
-          uncertaintyInMilliseconds: 500
-        }]
-        context.succeed(buildResponse(properties))
-      })
+      // Check if this is a scene/group
+      if (what === 'scene') {
+        let sceneIdx = cookie.SceneIDX
+        ctrlScene(sceneIdx, funcName, function (callback) {
+          if (callback === 'Err') {
+            context.succeed(buildErrorResponse('ErrorResponse', 'Scene control failed'))
+            return
+          }
+          const properties = [{
+            namespace: 'Alexa.PowerController',
+            name: 'powerState',
+            value: name === 'TurnOn' ? 'ON' : 'OFF',
+            timeOfSample: new Date().toISOString(),
+            uncertaintyInMilliseconds: 500
+          }]
+          context.succeed(buildResponse(properties))
+        })
+      } else {
+        ctrlDev('switch', endpointId, funcName, function (callback) {
+          if (callback === 'Err') {
+            context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
+            return
+          }
+          const properties = [{
+            namespace: 'Alexa.PowerController',
+            name: 'powerState',
+            value: name === 'TurnOn' ? 'ON' : 'OFF',
+            timeOfSample: new Date().toISOString(),
+            uncertaintyInMilliseconds: 500
+          }]
+          context.succeed(buildResponse(properties))
+        })
+      }
       break
 
     case 'Alexa.BrightnessController':
@@ -314,6 +339,24 @@ module.exports = function (event, context) {
       if (name === 'ReportState') {
         // Query current state of device
         const properties = []
+        const scope = directive.endpoint.scope // Preserve the scope from request
+        
+        // Build response with scope
+        const buildReportStateResponse = (props) => {
+          return {
+            event: {
+              header: responseHeader,
+              endpoint: {
+                scope: scope,
+                endpointId: endpointId
+              },
+              payload: {}
+            },
+            context: {
+              properties: props
+            }
+          }
+        }
         
         // Check what capabilities this device has based on cookie
         if (what === 'temp') {
@@ -332,6 +375,14 @@ module.exports = function (event, context) {
                   timeOfSample: new Date().toISOString(),
                   uncertaintyInMilliseconds: 500
                 })
+                // Add thermostatMode - required for thermostat state reporting
+                properties.push({
+                  namespace: 'Alexa.ThermostatController',
+                  name: 'thermostatMode',
+                  value: 'HEAT',
+                  timeOfSample: new Date().toISOString(),
+                  uncertaintyInMilliseconds: 500
+                })
               }
               
               // Get temperature reading
@@ -345,7 +396,7 @@ module.exports = function (event, context) {
                     uncertaintyInMilliseconds: 500
                   })
                 }
-                context.succeed(buildResponse(properties))
+                context.succeed(buildReportStateResponse(properties))
               })
             })
           } else {
@@ -360,7 +411,7 @@ module.exports = function (event, context) {
                   uncertaintyInMilliseconds: 500
                 })
               }
-              context.succeed(buildResponse(properties))
+              context.succeed(buildReportStateResponse(properties))
             })
           }
         } else if (what === 'humidity') {
@@ -384,7 +435,7 @@ module.exports = function (event, context) {
                 uncertaintyInMilliseconds: 500
               })
             }
-            context.succeed(buildResponse(properties))
+            context.succeed(buildReportStateResponse(properties))
           })
         } else if (what === 'light') {
           // Get power state and brightness
@@ -408,7 +459,7 @@ module.exports = function (event, context) {
                 })
               }
             }
-            context.succeed(buildResponse(properties))
+            context.succeed(buildReportStateResponse(properties))
           })
         } else if (what === 'selector') {
           // Get current mode
@@ -432,7 +483,7 @@ module.exports = function (event, context) {
                 })
               }
             }
-            context.succeed(buildResponse(properties))
+            context.succeed(buildReportStateResponse(properties))
           })
         } else if (what === 'weight') {
           // Get weight reading
@@ -447,7 +498,7 @@ module.exports = function (event, context) {
                 uncertaintyInMilliseconds: 500
               })
             }
-            context.succeed(buildResponse(properties))
+            context.succeed(buildReportStateResponse(properties))
           })
         } else if (what === 'general') {
           // Get general sensor reading
@@ -483,7 +534,7 @@ module.exports = function (event, context) {
                 })
               }
             }
-            context.succeed(buildResponse(properties))
+            context.succeed(buildReportStateResponse(properties))
           })
         } else {
           context.succeed(buildErrorResponse('ErrorResponse', 'State report not supported for this device'))

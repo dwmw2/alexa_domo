@@ -55,7 +55,7 @@ class Domoticz {
   }
 
   changeSceneState(params, callback) {
-    const state = params.state === 'on' ? 'On' : 'Off'
+    const state = params.state.toLowerCase() === 'on' ? 'On' : 'Off'
     this.request(`/json.htm?type=command&param=switchscene&idx=${params.idx}&switchcmd=${state}`, callback)
   }
 
