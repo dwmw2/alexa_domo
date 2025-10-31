@@ -26,11 +26,33 @@ module.exports = function (event, context, passBack) {
       return
     }
     const devArray = devices.result
+    const linkedDevices = new Set() // Track devices that are linked and should be hidden
+    
+    // First pass: find linked setpoint/temperature pairs
+    const setpointLinks = new Map()
+    if (devArray) {
+      devArray.forEach(device => {
+        if (device.Type === 'Thermostat' && (device.PlanID !== '0' && device.PlanID !== '')) {
+          const baseName = device.Name.replace(/\s+(Setpoint|SetPoint)$/i, '')
+          const tempDevice = devArray.find(d => 
+            d.Name === baseName + ' Temperature' && 
+            d.Type.startsWith('Temp') &&
+            d.PlanID !== '0' && d.PlanID !== ''
+          )
+          if (tempDevice) {
+            setpointLinks.set(tempDevice.idx, device.idx)
+            linkedDevices.add(device.idx) // Hide the setpoint device
+          }
+        }
+      })
+    }
+    
     if (devArray) {
       for (let i = 0; i < devArray.length; i++) {
         const device = devArray[i]
         
         if (device.PlanID === '0' || device.PlanID === '') { continue }
+        if (linkedDevices.has(device.idx)) { continue } // Skip linked setpoint devices
 
         const devType = device.Type
         let setSwitch = device.SwitchType || null
@@ -304,16 +326,41 @@ module.exports = function (event, context, passBack) {
                 proactivelyReported: false,
                 retrievable: true
               }
-            },
-            {
-              type: 'AlexaInterface',
-              interface: 'Alexa',
-              version: '3'
             }
           ]
-          endpoint.cookie = {
-            WhatAmI: 'temp'
+          
+          // Check if this temperature device has a linked setpoint
+          const setpointIdx = setpointLinks.get(device.idx)
+          if (setpointIdx) {
+            // Add thermostat controller capability
+            endpoint.displayCategories = ['THERMOSTAT']
+            endpoint.capabilities.unshift({
+              type: 'AlexaInterface',
+              interface: 'Alexa.ThermostatController',
+              version: '3',
+              properties: {
+                supported: [
+                  { name: 'targetSetpoint' }
+                ],
+                proactivelyReported: false,
+                retrievable: true
+              }
+            })
+            endpoint.cookie = {
+              WhatAmI: 'temp',
+              setpointDeviceIdx: setpointIdx
+            }
+          } else {
+            endpoint.cookie = {
+              WhatAmI: 'temp'
+            }
           }
+          
+          endpoint.capabilities.push({
+            type: 'AlexaInterface',
+            interface: 'Alexa',
+            version: '3'
+          })
           endpoints.push(endpoint)
         }
       }

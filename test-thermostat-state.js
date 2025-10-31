@@ -10,10 +10,10 @@ const event = {
       correlationToken: 'test-correlation-token'
     },
     endpoint: {
-      endpointId: '915',
+      endpointId: '917',
       cookie: {
         WhatAmI: 'temp',
-        tempDeviceIdx: '917'
+        setpointDeviceIdx: '915'
       }
     },
     payload: {}

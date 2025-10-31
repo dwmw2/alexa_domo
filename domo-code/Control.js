@@ -207,7 +207,8 @@ module.exports = function (event, context) {
     case 'Alexa.ThermostatController':
       if (name === 'SetTargetTemperature') {
         let temp = payload.targetSetpoint.value
-        ctrlTemp(endpointId, temp, function (callback) {
+        const targetIdx = cookie.setpointDeviceIdx || endpointId
+        ctrlTemp(targetIdx, temp, function (callback) {
           if (callback === 'Err') {
             context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
             return
@@ -223,10 +224,11 @@ module.exports = function (event, context) {
         })
       } else if (name === 'AdjustTargetTemperature') {
         let delta = payload.targetSetpointDelta.value
-        getDev(endpointId, what, function (returnme) {
-          let current = parseFloat(returnme)
+        const targetIdx = cookie.setpointDeviceIdx || endpointId
+        getDev(targetIdx, 'temp', function (returnme) {
+          let current = parseFloat(returnme.value1)
           let newTemp = current + delta
-          ctrlTemp(endpointId, newTemp, function (callback) {
+          ctrlTemp(targetIdx, newTemp, function (callback) {
             if (callback === 'Err') {
               context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
               return
@@ -251,21 +253,25 @@ module.exports = function (event, context) {
         
         // Check what capabilities this device has based on cookie
         if (what === 'temp') {
-          // Get setpoint for thermostat
-          getDev(endpointId, what, function (setpointData) {
-            if (setpointData !== 'Err' && setpointData.value1 !== undefined) {
-              properties.push({
-                namespace: 'Alexa.ThermostatController',
-                name: 'targetSetpoint',
-                value: { value: parseFloat(setpointData.value1), scale: 'CELSIUS' },
-                timeOfSample: new Date().toISOString(),
-                uncertaintyInMilliseconds: 500
-              })
-            }
-            
-            // If there's a linked temperature device, get its reading
-            if (cookie.tempDeviceIdx) {
-              getDev(cookie.tempDeviceIdx, 'temp', function (tempData) {
+          // Check if this is a temperature device with linked setpoint or a standalone thermostat
+          const setpointIdx = cookie.setpointDeviceIdx || endpointId
+          const tempIdx = cookie.tempDeviceIdx || endpointId
+          
+          // Get setpoint if device has thermostat capability
+          if (cookie.setpointDeviceIdx || cookie.tempDeviceIdx) {
+            getDev(setpointIdx, 'temp', function (setpointData) {
+              if (setpointData !== 'Err' && setpointData.value1 !== undefined) {
+                properties.push({
+                  namespace: 'Alexa.ThermostatController',
+                  name: 'targetSetpoint',
+                  value: { value: parseFloat(setpointData.value1), scale: 'CELSIUS' },
+                  timeOfSample: new Date().toISOString(),
+                  uncertaintyInMilliseconds: 500
+                })
+              }
+              
+              // Get temperature reading
+              getDev(tempIdx, 'temp', function (tempData) {
                 if (tempData !== 'Err' && tempData.value1 !== undefined) {
                   properties.push({
                     namespace: 'Alexa.TemperatureSensor',
@@ -277,10 +283,22 @@ module.exports = function (event, context) {
                 }
                 context.succeed(buildResponse(properties))
               })
-            } else {
+            })
+          } else {
+            // Standalone temperature sensor
+            getDev(endpointId, 'temp', function (tempData) {
+              if (tempData !== 'Err' && tempData.value1 !== undefined) {
+                properties.push({
+                  namespace: 'Alexa.TemperatureSensor',
+                  name: 'temperature',
+                  value: { value: parseFloat(tempData.value1), scale: 'CELSIUS' },
+                  timeOfSample: new Date().toISOString(),
+                  uncertaintyInMilliseconds: 500
+                })
+              }
               context.succeed(buildResponse(properties))
-            }
-          })
+            })
+          }
         } else if (what === 'humidity') {
           // Get temperature and/or humidity
           getDev(endpointId, what, function (data) {
