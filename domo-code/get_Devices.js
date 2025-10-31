@@ -163,7 +163,7 @@ module.exports = function (event, context, passBack) {
                 configuration: {
                   ordered: false,
                   supportedModes: modes.map((mode, index) => ({
-                    value: 'Input.' + mode.replace(/\s+/g, ''),
+                    value: 'Input.' + mode.replace(/[^a-zA-Z0-9]/g, '_'),
                     modeResources: {
                       friendlyNames: [
                         {
