@@ -1,335 +1,250 @@
 /* eslint-disable max-len */
-
 'use strict'
 
 let hsl = require('../node_modules/hsl-to-hex')
-
-// Domoticz controls
-
-//  let getDev = require('./new_get_dev')
-//  let ctrlDev = require('./new_ctrl_dev')
-//  let ctrlTemp = require('./new_ctrl_temp')
-//  let ctrlKelvin = require('./new_ctrl_kelvin')
-
 let ctrlTemp = require('./ctrl_temp')
 let ctrlDev = require('./ctrl_dev')
 let getDev = require('./get_dev')
-
 let ctrlScene = require('./ctrl_scene')
 let ctrlColour = require('./ctrl_colour')
-
 let ctrlKelvin = require('./ctrl_kelvin')
-
 const makeHeader = require('./HeaderGen')
 let log = require('./logger')
-var payload
 
-// This handles the Control requests
 module.exports = function (event, context) {
-  let what = event.payload.appliance.additionalApplianceDetails.WhatAmI
-  let switchtype = event.payload.appliance.additionalApplianceDetails.switchis
-  let applianceId = event.payload.appliance.applianceId
-  let maxDimLevel
-  maxDimLevel = event.payload.appliance.additionalApplianceDetails.maxDimLevel
+  const directive = event.directive
+  const header = directive.header
+  const endpoint = directive.endpoint
+  const payload = directive.payload
+  
+  const endpointId = endpoint.endpointId
+  const cookie = endpoint.cookie || {}
+  const what = cookie.WhatAmI
+  const switchtype = cookie.switchis
+  const maxDimLevel = cookie.maxDimLevel
 
-  let funcName
-  let strHeader = event.header.name
+  const namespace = header.namespace
+  const name = header.name
 
-  let strConf = strHeader.replace('Request', 'Confirmation')
-  var headers = makeHeader(event, strConf)
-
-  switch (what) {
-    case 'blind':
-    case 'light':
-      switchtype = 'switch'
-      if (strHeader === 'TurnOnRequest') {
-        funcName = 'On'
-      } else if (strHeader === 'TurnOffRequest') {
-        funcName = 'Off'
-      } else if (strHeader === 'SetColorTemperatureRequest') {
-        let kelvin = event.payload.colorTemperature.value
-
-        ctrlKelvin(applianceId, kelvin, function (callback) {
-          payload = callback
-          if (callback === 'Err') {
-            headers.name = 'TargetOfflineError'
-            payload = {}
-          }
-          let result = {
-            header: headers,
-            payload: payload
-          }
-          context.succeed(result)
-        })
-        break
-      } else if (strHeader === 'SetColorRequest') {
-
-        let intHue = event.payload.color.hue
-        let intBright = event.payload.color.brightness
-        let intSat = event.payload.color.saturation
-        let hex = hsl(intHue, intSat, intBright)
-        hex = hex.replace(/^#/, '')
-
-        ctrlColour(applianceId, hex, intBright, function (callback) {
-          let payload = {
-            achievedState: {
-              color: {
-                hue: callback
-              },
-              saturation: intSat,
-              brightness: intBright
-            }
-          }
-          payload = callback
-          if (callback === 'Err') {
-            headers.name = 'TargetOfflineError'
-            payload = {}
-          }
-          let result = {
-            header: headers,
-            payload: payload
-          }
-          context.succeed(result)
-        })
-        break
-      } else if (strHeader === 'SetPercentageRequest') {
-        let dimLevel = event.payload.percentageState.value / (100 / maxDimLevel)
-        switchtype = 'dimmable'
-        funcName = dimLevel
-      } else if (strHeader.includes('Increment') || strHeader.includes('Decrement')) {
-        let incLvl = event.payload.deltaPercentage.value
-
-        switchtype = 'dimmable'
-
-        getDev(applianceId, what, function (returnme) {
-          let intRet = parseInt(returnme)
-          if (strConf.charAt(0) === 'I') {
-            funcName = intRet + (intRet / 100 * incLvl)
-          } else {
-            funcName = intRet - (intRet / 100 * incLvl)
-          }
-          ctrlDev(switchtype, applianceId, funcName, function (callback){
-            payload = callback
-            if (callback === 'Err') {
-              headers.name = 'TargetOfflineError'
-              payload = {}
-            }
-            let result = {
-              header: headers,
-              payload: payload
-            }
-            context.succeed(result)
-          })
-        })
-        break
+  const responseHeader = makeHeader(directive, 'Response', 'Alexa')
+  
+  const buildResponse = (properties = []) => {
+    return {
+      event: {
+        header: responseHeader,
+        endpoint: {
+          endpointId: endpointId
+        },
+        payload: {}
+      },
+      context: {
+        properties: properties
       }
+    }
+  }
 
-      ctrlDev(switchtype, applianceId, funcName, function (callback) {
-        let payload
-        payload = callback
+  const buildErrorResponse = (type, message) => {
+    const errorHeader = makeHeader(directive, type, 'Alexa')
+    return {
+      event: {
+        header: errorHeader,
+        endpoint: {
+          endpointId: endpointId
+        },
+        payload: {
+          message: message
+        }
+      }
+    }
+  }
 
+  switch (namespace) {
+    case 'Alexa.PowerController':
+      let funcName = name === 'TurnOn' ? 'On' : 'Off'
+      ctrlDev('switch', endpointId, funcName, function (callback) {
         if (callback === 'Err') {
-          headers.name = 'TargetOfflineError'
-          payload = {}
+          context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
+          return
         }
-        let result = {
-          header: headers,
-          payload: payload
-        }
-        console.log(result)
-        context.succeed(result)
+        const properties = [{
+          namespace: 'Alexa.PowerController',
+          name: 'powerState',
+          value: name === 'TurnOn' ? 'ON' : 'OFF',
+          timeOfSample: new Date().toISOString(),
+          uncertaintyInMilliseconds: 500
+        }]
+        context.succeed(buildResponse(properties))
       })
       break
-    case 'lock':
-      let lockstate = event.payload.lockState
-      if (strHeader === 'GetLockStateRequest') {
-        getDev(applianceId, what, function (callback) {
-          let GetPayload = {
-            lockState: 'LOCKED'
-          }
-          headers = makeHeader(event, strConf)
+
+    case 'Alexa.BrightnessController':
+      if (name === 'SetBrightness') {
+        let brightness = payload.brightness
+        let dimLevel = brightness / (100 / maxDimLevel)
+        ctrlDev('dimmable', endpointId, dimLevel, function (callback) {
           if (callback === 'Err') {
-            headers.name = 'TargetOfflineError'
-            payload = {}
+            context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
+            return
           }
-          payload = callback
-          let result = {
-            header: headers,
-            payload: payload
-          }
-          context.succeed(result)
+          const properties = [{
+            namespace: 'Alexa.BrightnessController',
+            name: 'brightness',
+            value: brightness,
+            timeOfSample: new Date().toISOString(),
+            uncertaintyInMilliseconds: 500
+          }]
+          context.succeed(buildResponse(properties))
         })
-        break
-      }
-      if (strHeader === 'SetLockStateRequest') {
-        if (lockstate === 'LOCKED') {
-          funcName = 'On'
-        } else {
-          funcName = 'Off'
-        }
-        headers = makeHeader(event, strConf)
-
-        ctrlDev(switchtype, applianceId, funcName, function (callback) {
-          let payload = {
-            lockState: lockstate
-          }
-
-          if (callback === 'Err') {
-            headers.name = 'TargetOfflineError'
-            payload = {}
-          }
-          let result = {
-            header: headers,
-            payload: payload
-          }
-          context.succeed(result)
-        })
-        break
-      }
-      break
-    case 'scene':
-
-      let AppID = parseInt(event.payload.appliance.additionalApplianceDetails.SceneIDX) - 200
-
-      if (strHeader === 'TurnOnRequest') {
-        funcName = 'On'
-      } else if (strHeader === 'TurnOffRequest') {
-        funcName = 'Off'
-      }
-      console.log('here? - on/off - IDX ', funcName, AppID)
-     // var headers = makeHeader(event, strConf)
-      ctrlScene(AppID, funcName, function (callback) {
-        payload = callback
-        if (callback === 'Err') {
-          headers.name = 'TargetOfflineError'
-          payload = {}
-        }
-
-        let result = {
-          header: headers,
-          payload: payload
-        }
-        context.succeed(result)
-      })
-      break
-    case 'temp':
-      applianceId = event.payload.appliance.applianceId
-
-      if (strHeader.includes('IncrementTargetTemperature') || strHeader.includes('DecrementTargetTemperature')) {
-        let incLvl = event.payload.deltaTemperature.value
-        let temp
-        getDev(applianceId, what, function (returnme) {
-          let intRet = parseFloat(returnme)
-          if (strConf.charAt(0) === 'I') {
-            temp = intRet + incLvl
-          } else {
-            temp = intRet - incLvl
-          }
-          log('temperature to set is: ', temp)
-//          let headers = makeHeader(event, strConf)
-
-          let TempPayload = {
-            targetTemperature: {
-              value: temp
-            },
-            temperatureMode: {
-              value: 'HEAT'
-            },
-            previousState: {
-              targetTemperature: {
-                value: intRet
-              },
-              mode: {
-                value: 'Heat'
-              }
-            }
-          }
-          ctrlTemp(applianceId, temp, function (callback) {
+      } else if (name === 'AdjustBrightness') {
+        let delta = payload.brightnessDelta
+        getDev(endpointId, what, function (returnme) {
+          let current = parseInt(returnme)
+          let newBrightness = Math.max(0, Math.min(100, current + delta))
+          let dimLevel = newBrightness / (100 / maxDimLevel)
+          ctrlDev('dimmable', endpointId, dimLevel, function (callback) {
             if (callback === 'Err') {
-              headers.name = 'TargetOfflineError'
-              TempPayload = {}
+              context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
+              return
             }
-            let result = {
-              header: headers,
-              payload: TempPayload
-            }
-            context.succeed(result)
+            const properties = [{
+              namespace: 'Alexa.BrightnessController',
+              name: 'brightness',
+              value: newBrightness,
+              timeOfSample: new Date().toISOString(),
+              uncertaintyInMilliseconds: 500
+            }]
+            context.succeed(buildResponse(properties))
           })
         })
-        break
-      } else if (strHeader.includes('SetTargetTemperature')) {
-        let temp = event.payload.targetTemperature.value
-                    //    log("temp to set is ", temp)
-//        let headers = makeHeader(event, strConf)
-
-        let TempPayload
-        TempPayload = {
-          targetTemperature: {
-            value: temp
-          },
-          temperatureMode: {
-            value: 'HEAT'
-          },
-          previousState: {
-            targetTemperature: {
-              value: 0
-            },
-            mode: {
-              value: 'Heat'
-            }
-          }
-        }
-        ctrlTemp(applianceId, temp, function (callback) {
-          if (callback === 'Err') {
-            headers.name = 'TargetOfflineError'
-            TempPayload = {}
-          }
-          let result = {
-            header: headers,
-            payload: TempPayload
-          }
-          context.succeed(result)
-        })
-        break
       }
-                // GetTemp request
-      else if (strHeader.includes('GetTemperatureReading') || strHeader.includes('GetTargetTemperature')) {
-        strConf = strHeader.replace('Request', 'Response')
-        let header = makeHeader(event, strConf)
-        // log("header is ", strHeader)
-        getDev(applianceId, what, function (callback) {
-          if (strHeader.includes('Target')) {
-            var GetPayload
-            GetPayload = {
-              targetTemperature: {
-                value: parseFloat(callback.value1)
-              },
-              temperatureMode: {
-                value: 'CUSTOM',
-                friendlyName: callback.value2
-              }
-            }
-          } else if (strHeader.includes('Reading')) {
-            GetPayload = {
-              temperatureReading: {
-                value: parseFloat(callback.value1)
-              }
-            }
-          }
+      break
+
+    case 'Alexa.ColorController':
+      let hue = payload.color.hue
+      let saturation = payload.color.saturation
+      let brightness = payload.color.brightness
+      let hex = hsl(hue, saturation, brightness).replace(/^#/, '')
+      
+      ctrlColour(endpointId, hex, brightness, function (callback) {
+        if (callback === 'Err') {
+          context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
+          return
+        }
+        const properties = [{
+          namespace: 'Alexa.ColorController',
+          name: 'color',
+          value: { hue, saturation, brightness },
+          timeOfSample: new Date().toISOString(),
+          uncertaintyInMilliseconds: 500
+        }]
+        context.succeed(buildResponse(properties))
+      })
+      break
+
+    case 'Alexa.ColorTemperatureController':
+      if (name === 'SetColorTemperature') {
+        let kelvin = payload.colorTemperatureInKelvin
+        ctrlKelvin(endpointId, kelvin, function (callback) {
           if (callback === 'Err') {
-            headers.name = 'TargetOfflineError'
-            GetPayload = {}
+            context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
+            return
           }
-          let result
-          result = {
-            header: header,
-            payload: GetPayload
-          }
-          context.succeed(result)
+          const properties = [{
+            namespace: 'Alexa.ColorTemperatureController',
+            name: 'colorTemperatureInKelvin',
+            value: kelvin,
+            timeOfSample: new Date().toISOString(),
+            uncertaintyInMilliseconds: 500
+          }]
+          context.succeed(buildResponse(properties))
         })
       }
       break
+
+    case 'Alexa.SceneController':
+      let sceneIdx = parseInt(cookie.SceneIDX) - 200
+      ctrlScene(sceneIdx, 'On', function (callback) {
+        if (callback === 'Err') {
+          context.succeed(buildErrorResponse('ErrorResponse', 'Scene activation failed'))
+          return
+        }
+        const activationHeader = makeHeader(directive, 'ActivationStarted', 'Alexa.SceneController')
+        context.succeed({
+          event: {
+            header: activationHeader,
+            endpoint: {
+              endpointId: endpointId
+            },
+            payload: {
+              cause: { type: 'VOICE_INTERACTION' },
+              timestamp: new Date().toISOString()
+            }
+          }
+        })
+      })
+      break
+
+    case 'Alexa.LockController':
+      if (name === 'Lock' || name === 'Unlock') {
+        let lockFunc = name === 'Lock' ? 'On' : 'Off'
+        ctrlDev(switchtype, endpointId, lockFunc, function (callback) {
+          if (callback === 'Err') {
+            context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
+            return
+          }
+          const properties = [{
+            namespace: 'Alexa.LockController',
+            name: 'lockState',
+            value: name === 'Lock' ? 'LOCKED' : 'UNLOCKED',
+            timeOfSample: new Date().toISOString(),
+            uncertaintyInMilliseconds: 500
+          }]
+          context.succeed(buildResponse(properties))
+        })
+      }
+      break
+
+    case 'Alexa.ThermostatController':
+      if (name === 'SetTargetTemperature') {
+        let temp = payload.targetSetpoint.value
+        ctrlTemp(endpointId, temp, function (callback) {
+          if (callback === 'Err') {
+            context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
+            return
+          }
+          const properties = [{
+            namespace: 'Alexa.ThermostatController',
+            name: 'targetSetpoint',
+            value: { value: temp, scale: 'CELSIUS' },
+            timeOfSample: new Date().toISOString(),
+            uncertaintyInMilliseconds: 500
+          }]
+          context.succeed(buildResponse(properties))
+        })
+      } else if (name === 'AdjustTargetTemperature') {
+        let delta = payload.targetSetpointDelta.value
+        getDev(endpointId, what, function (returnme) {
+          let current = parseFloat(returnme)
+          let newTemp = current + delta
+          ctrlTemp(endpointId, newTemp, function (callback) {
+            if (callback === 'Err') {
+              context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
+              return
+            }
+            const properties = [{
+              namespace: 'Alexa.ThermostatController',
+              name: 'targetSetpoint',
+              value: { value: newTemp, scale: 'CELSIUS' },
+              timeOfSample: new Date().toISOString(),
+              uncertaintyInMilliseconds: 500
+            }]
+            context.succeed(buildResponse(properties))
+          })
+        })
+      }
+      break
+
     default:
-      log('error ', 'error - not hit a device type')
+      context.succeed(buildErrorResponse('ErrorResponse', 'Unsupported directive'))
   }
 }

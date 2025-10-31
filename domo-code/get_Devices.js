@@ -14,12 +14,11 @@ const api = new Domoticz({
 let log = require('./logger')
 const makeHeader = require('./HeaderGen')
 const handleError = require('./handleError')
-const appliances = []
 
 module.exports = function (event, context, passBack) {
-  const responseName = 'DiscoverAppliancesResponse'
-  const headers = makeHeader(event, responseName)
-//  lets get the devices from Domoticz:
+  const endpoints = []
+  const headers = makeHeader(event, 'Discover.Response', 'Alexa.Discovery')
+  
   api.getDevices({}, function (err, devices) {
     if (err) {
       log('error:', err)
@@ -30,121 +29,261 @@ module.exports = function (event, context, passBack) {
     if (devArray) {
       for (let i = 0; i < devArray.length; i++) {
         const device = devArray[i]
-        //log('device detail is: ', device)
-                // Omit devices which aren't in a room plan
-       if (device.PlanID === '0' || device.PlanID === '') { continue }
+        
+        if (device.PlanID === '0' || device.PlanID === '') { continue }
 
         const devType = device.Type
+        let setSwitch = device.SwitchType || null
 
-        let setSwitch
-
-        if (device.SwitchType !== null){
-          setSwitch = device.SwitchType
-        }
-        log('empty payload: ', appliances)
-
-       // console.log(setSwitch)
-        let devName = device.name
-
-        if (device.description !== '') {
-          //  Search for Alexa_Name string, ignore casesensitive and whitespaces
-
+        let devName = device.Name
+        if (device.Description !== '') {
           const regex = /Alexa_Name:\s*(.+)/im
-          const match = regex.exec(device.description)
+          const match = regex.exec(device.Description)
           if (match !== null) {
             devName = match[1].trim()
           }
         }
-         let msg = ("device is - ", device.name, " & description", devName);
-           log("device info", msg);
-        let appliancename = {
-          applianceId: device.idx,
-          manufacturerName: device.hardwareName,
-          modelName: device.subType,
-          version: device.switchType,
+
+        let endpoint = {
+          endpointId: device.idx,
+          manufacturerName: device.HardwareName,
           friendlyName: devName,
-          friendlyDescription: devType,
-          isReachable: true
+          description: devType,
+          displayCategories: [],
+          capabilities: []
         }
 
         if (devType.startsWith('Scene') || devType.startsWith('Group')) {
-          appliancename.manufacturerName = device.name,
-          appliancename.modelName = device.name,
-          appliancename.version = device.idx,
-          appliancename.applianceId = 'scene_' + device.idx
-          appliancename.actions = ([
-            'turnOn',
-            'turnOff'
-          ])
-          appliancename.additionalApplianceDetails = ({
+          endpoint.endpointId = 'scene_' + device.idx
+          endpoint.displayCategories = ['SCENE_TRIGGER']
+          endpoint.capabilities = [
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa.SceneController',
+              version: '3',
+              supportsDeactivation: false
+            },
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa',
+              version: '3'
+            }
+          ]
+          endpoint.cookie = {
             WhatAmI: 'scene',
             SceneIDX: parseInt(device.idx) + 200
-          })
-          log('pushing: ', appliancename)
-          appliances.push(appliancename)
+          }
+          endpoints.push(endpoint)
         } else if (devType.startsWith('Light')) {
-          appliancename.actions = ([
-            'incrementPercentage',
-            'decrementPercentage',
-            'setPercentage',
-            'turnOn',
-            'turnOff',
-            'setColor',
-            'setColorTemperature'
-          ])
-          appliancename.additionalApplianceDetails = ({
+          endpoint.displayCategories = ['LIGHT']
+          endpoint.capabilities = [
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa.PowerController',
+              version: '3',
+              properties: {
+                supported: [{ name: 'powerState' }],
+                proactivelyReported: false,
+                retrievable: true
+              }
+            },
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa.BrightnessController',
+              version: '3',
+              properties: {
+                supported: [{ name: 'brightness' }],
+                proactivelyReported: false,
+                retrievable: true
+              }
+            },
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa.ColorController',
+              version: '3',
+              properties: {
+                supported: [{ name: 'color' }],
+                proactivelyReported: false,
+                retrievable: true
+              }
+            },
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa.ColorTemperatureController',
+              version: '3',
+              properties: {
+                supported: [{ name: 'colorTemperatureInKelvin' }],
+                proactivelyReported: false,
+                retrievable: true
+              }
+            },
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa',
+              version: '3'
+            }
+          ]
+          endpoint.cookie = {
             maxDimLevel: device.maxDimLevel,
             switchis: setSwitch,
             WhatAmI: 'light'
-          })
-          log('pushing: ', appliancename)
-          appliances.push(appliancename)
+          }
+          endpoints.push(endpoint)
         } else if (devType.startsWith('Blind') || devType.startsWith('RFY')) {
-          appliancename.actions = ([
-            'turnOn',
-            'turnOff'
-          ])
-          appliancename.additionalApplianceDetails = ({
+          endpoint.displayCategories = ['INTERIOR_BLIND']
+          endpoint.capabilities = [
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa.PowerController',
+              version: '3',
+              properties: {
+                supported: [{ name: 'powerState' }],
+                proactivelyReported: false,
+                retrievable: true
+              }
+            },
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa',
+              version: '3'
+            }
+          ]
+          endpoint.cookie = {
             switchis: setSwitch,
             WhatAmI: 'blind'
-          })
-          log('pushing: ', appliancename)
-          appliances.push(appliancename)
+          }
+          endpoints.push(endpoint)
         } else if (devType.startsWith('Lock') || devType.startsWith('Contact')) {
-          appliancename.actions = ([
-            'getLockState',
-            'setLockState'
-          ])
-          appliancename.additionalApplianceDetails = ({
+          endpoint.displayCategories = ['SMARTLOCK']
+          endpoint.capabilities = [
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa.LockController',
+              version: '3',
+              properties: {
+                supported: [{ name: 'lockState' }],
+                proactivelyReported: false,
+                retrievable: true
+              }
+            },
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa',
+              version: '3'
+            }
+          ]
+          endpoint.cookie = {
             switchis: setSwitch,
             WhatAmI: 'lock'
-          })
-          log('pushing: ', appliancename)
-          appliances.push(appliancename)
+          }
+          endpoints.push(endpoint)
+        } else if (devType.startsWith('Temp + Humidity')) {
+          endpoint.displayCategories = ['TEMPERATURE_SENSOR']
+          endpoint.capabilities = [
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa.TemperatureSensor',
+              version: '3',
+              properties: {
+                supported: [{ name: 'temperature' }],
+                proactivelyReported: false,
+                retrievable: true
+              }
+            },
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa.HumiditySensor',
+              version: '3',
+              properties: {
+                supported: [{ name: 'humidity' }],
+                proactivelyReported: false,
+                retrievable: true
+              }
+            },
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa',
+              version: '3'
+            }
+          ]
+          endpoint.cookie = {
+            WhatAmI: 'humidity'
+          }
+          endpoints.push(endpoint)
+        } else if (devType.startsWith('Humidity')) {
+          endpoint.displayCategories = ['OTHER']
+          endpoint.capabilities = [
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa.HumiditySensor',
+              version: '3',
+              properties: {
+                supported: [{ name: 'humidity' }],
+                proactivelyReported: false,
+                retrievable: true
+              }
+            },
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa',
+              version: '3'
+            }
+          ]
+          endpoint.cookie = {
+            WhatAmI: 'humidity'
+          }
+          endpoints.push(endpoint)
         } else if (devType.startsWith('Temp') || devType.startsWith('Therm')) {
-          appliancename.version = 'temp'
-          appliancename.actions = ([
-            'getTargetTemperature',
-            'getTemperatureReading',
-            'incrementTargetTemperature',
-            'decrementTargetTemperature',
-            'setTargetTemperature'
-          ])
-          appliancename.additionalApplianceDetails = ({
+          endpoint.displayCategories = ['THERMOSTAT']
+          endpoint.capabilities = [
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa.ThermostatController',
+              version: '3',
+              properties: {
+                supported: [
+                  { name: 'targetSetpoint' },
+                  { name: 'thermostatMode' }
+                ],
+                proactivelyReported: false,
+                retrievable: true
+              },
+              configuration: {
+                supportedModes: ['HEAT', 'COOL', 'AUTO'],
+                supportsScheduling: false
+              }
+            },
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa.TemperatureSensor',
+              version: '3',
+              properties: {
+                supported: [{ name: 'temperature' }],
+                proactivelyReported: false,
+                retrievable: true
+              }
+            },
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa',
+              version: '3'
+            }
+          ]
+          endpoint.cookie = {
             WhatAmI: 'temp'
-          })
-          log('pushing: ', appliancename)
-          appliances.push(appliancename)
+          }
+          endpoints.push(endpoint)
         }
       }
     }
-    log('payload: ', appliances)
-    const payloads = {
-      discoveredAppliances: appliances
-    }
+    
     const result = {
-      header: headers,
-      payload: payloads
+      event: {
+        header: headers,
+        payload: {
+          endpoints: endpoints
+        }
+      }
     }
     passBack(result)
   })

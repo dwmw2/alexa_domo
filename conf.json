@@ -1,9 +1,0 @@
-
-
-{
-    "protocol": "https",
-    "host": "domoticz",
-    "port": 8443,
-    "username": "",
-    "password": ""
-}
