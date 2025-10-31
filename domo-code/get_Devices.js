@@ -108,8 +108,12 @@ module.exports = function (event, context, passBack) {
                 proactivelyReported: false,
                 retrievable: true
               }
-            },
-            {
+            }
+          ]
+          
+          // Only add brightness control for dimmable lights
+          if (setSwitch === 'Dimmer' || setSwitch === 'Selector') {
+            endpoint.capabilities.push({
               type: 'AlexaInterface',
               interface: 'Alexa.BrightnessController',
               version: '3',
@@ -118,8 +122,12 @@ module.exports = function (event, context, passBack) {
                 proactivelyReported: false,
                 retrievable: true
               }
-            },
-            {
+            })
+          }
+          
+          // Only add color control for RGB/RGBW lights
+          if (setSwitch === 'Selector' || device.SubType.includes('RGB')) {
+            endpoint.capabilities.push({
               type: 'AlexaInterface',
               interface: 'Alexa.ColorController',
               version: '3',
@@ -128,8 +136,8 @@ module.exports = function (event, context, passBack) {
                 proactivelyReported: false,
                 retrievable: true
               }
-            },
-            {
+            })
+            endpoint.capabilities.push({
               type: 'AlexaInterface',
               interface: 'Alexa.ColorTemperatureController',
               version: '3',
@@ -138,15 +146,17 @@ module.exports = function (event, context, passBack) {
                 proactivelyReported: false,
                 retrievable: true
               }
-            },
-            {
-              type: 'AlexaInterface',
-              interface: 'Alexa',
-              version: '3'
-            }
-          ]
+            })
+          }
+          
+          endpoint.capabilities.push({
+            type: 'AlexaInterface',
+            interface: 'Alexa',
+            version: '3'
+          })
+          
           endpoint.cookie = {
-            maxDimLevel: device.maxDimLevel,
+            maxDimLevel: device.MaxDimLevel,
             switchis: setSwitch,
             WhatAmI: 'light'
           }
