@@ -362,6 +362,54 @@ module.exports = function (event, context, passBack) {
             version: '3'
           })
           endpoints.push(endpoint)
+        } else if (devType === 'Weight') {
+          endpoint.displayCategories = ['OTHER']
+          endpoint.capabilities = [
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa.RangeController',
+              version: '3',
+              instance: 'Weight.Weight',
+              capabilityResources: {
+                friendlyNames: [
+                  {
+                    '@type': 'text',
+                    value: {
+                      text: 'Weight',
+                      locale: 'en-US'
+                    }
+                  }
+                ]
+              },
+              properties: {
+                supported: [
+                  {
+                    name: 'rangeValue'
+                  }
+                ],
+                proactivelyReported: false,
+                retrievable: true,
+                nonControllable: true
+              },
+              configuration: {
+                supportedRange: {
+                  minimumValue: 0,
+                  maximumValue: 100,
+                  precision: 0.01
+                },
+                unitOfMeasure: 'Weight.Kilograms'
+              }
+            },
+            {
+              type: 'AlexaInterface',
+              interface: 'Alexa',
+              version: '3'
+            }
+          ]
+          endpoint.cookie = {
+            WhatAmI: 'weight'
+          }
+          endpoints.push(endpoint)
         }
       }
     }

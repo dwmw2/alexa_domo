@@ -46,6 +46,10 @@ module.exports = function (idx, devType, sendback) {
           callBackString = device.Level
         } else if (devType === 'lock') {
           callBackString = device.Status
+        } else if (devType === 'weight') {
+          // Extract numeric value from Data field (e.g., "53.755 kg" -> 53.755)
+          const match = device.Data.match(/([0-9.]+)/)
+          callBackString = match ? match[1] : '0'
         }
         sendback(callBackString)
       }

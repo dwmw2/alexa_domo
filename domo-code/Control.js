@@ -346,6 +346,21 @@ module.exports = function (event, context) {
             }
             context.succeed(buildResponse(properties))
           })
+        } else if (what === 'weight') {
+          // Get weight reading
+          getDev(endpointId, what, function (data) {
+            if (data !== 'Err') {
+              properties.push({
+                namespace: 'Alexa.RangeController',
+                instance: 'Weight.Weight',
+                name: 'rangeValue',
+                value: parseFloat(data),
+                timeOfSample: new Date().toISOString(),
+                uncertaintyInMilliseconds: 500
+              })
+            }
+            context.succeed(buildResponse(properties))
+          })
         } else {
           context.succeed(buildErrorResponse('ErrorResponse', 'State report not supported for this device'))
         }
