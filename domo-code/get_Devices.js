@@ -598,15 +598,14 @@ module.exports = function (event, context, passBack) {
     
     console.log('Discovery complete:', endpoints.length, 'endpoints created')
     
-    // Filter to basic device types: lights, scenes, thermostats, temp/humidity sensors
+    // Filter out ModeController for now (selector switches)
     const filteredEndpoints = endpoints.filter(e => {
-      const hasComplexController = e.capabilities.some(c => 
-        c.interface === 'Alexa.ModeController' || 
-        c.interface === 'Alexa.RangeController'
+      const hasModeController = e.capabilities.some(c => 
+        c.interface === 'Alexa.ModeController'
       )
-      return !hasComplexController
+      return !hasModeController
     })
-    console.log('Filtered to', filteredEndpoints.length, 'basic endpoints')
+    console.log('Filtered to', filteredEndpoints.length, 'endpoints (excluded ModeController)')
     
     const result = {
       event: {
