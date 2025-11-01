@@ -1,8 +1,13 @@
-.PHONY: help deploy test-discovery test-control logs clean show-current-version
+.PHONY: help deploy create-function create-role add-alexa-permission lambda-status test-discovery test-control logs clean show-current-version
 
 FUNCTION_NAME ?= domoticz-alexa
 PROFILE ?=
 AWS_REGION ?= eu-west-1
+SKILL_ID ?=
+
+# Lazy evaluation - only computed when first used
+ACCOUNT_ID = $(shell aws sts get-caller-identity $(PROFILE_FLAG) --query Account --output text 2>/dev/null)
+ROLE_ARN ?= arn:aws:iam::$(ACCOUNT_ID):role/$(FUNCTION_NAME)-execution-role
 
 ifdef PROFILE
 PROFILE_FLAG = --profile $(PROFILE)
@@ -11,18 +16,35 @@ PROFILE_FLAG =
 endif
 
 help:
-	@echo "Available targets:"
+	@echo "Initial setup:"
+	@echo "  First-time setup requires three steps:"
+	@echo "  1. Create an IAM role for the Lambda function to run with"
+	@echo "  2. Create the Lambda function itself"
+	@echo "  3. Add permissions for Alexa to invoke the function"
+	@echo ""
+	@echo "  create-role          - Create IAM role for Lambda"
+	@echo "  create-function      - Create new Lambda function"
+	@echo "  add-alexa-permission - Add Alexa Smart Home trigger permission"
+	@echo ""
+	@echo "Development:"
 	@echo "  deploy               - Package and deploy Lambda function"
+	@echo "  lambda-status        - Check Lambda function status and configuration"
+	@echo "  show-current-version - Show deployed Lambda version"
+	@echo ""
+	@echo "Testing:"
 	@echo "  test-discovery       - Test device discovery"
 	@echo "  test-control         - Test device control"
-	@echo "  logs                 - Tail CloudWatch logs"
-	@echo "  show-current-version - Show deployed Lambda version"
+	@echo "  logs                 - Fetch recent CloudWatch logs"
+	@echo ""
+	@echo "Maintenance:"
 	@echo "  clean                - Remove build artifacts"
 	@echo ""
 	@echo "Variables:"
 	@echo "  PROFILE         - AWS profile (default: none)"
 	@echo "  FUNCTION_NAME   - Lambda function name (default: domoticz-alexa)"
 	@echo "  AWS_REGION      - AWS region (default: eu-west-1)"
+	@echo "  ROLE_ARN        - IAM role ARN (default: auto-detected)"
+	@echo "  SKILL_ID        - Alexa skill ID (default: none, allows all skills)"
 
 deploy:
 	@test -f conf.json || (echo "Error: conf.json not found. Copy conf.json.example to conf.json and configure your Domoticz settings." && exit 1)
@@ -54,6 +76,94 @@ deploy:
 		--query 'Description' \
 		--output text
 	@echo "Deployment complete"
+
+create-role:
+	@echo "Creating IAM role for Lambda execution..."
+	@echo '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}' > /tmp/trust-policy.json
+	@aws iam create-role \
+		--role-name $(FUNCTION_NAME)-execution-role \
+		--assume-role-policy-document file:///tmp/trust-policy.json \
+		$(PROFILE_FLAG) \
+		--query 'Role.Arn' \
+		--output text
+	@echo "Attaching basic execution policy..."
+	@aws iam attach-role-policy \
+		--role-name $(FUNCTION_NAME)-execution-role \
+		--policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole \
+		$(PROFILE_FLAG)
+	@rm -f /tmp/trust-policy.json
+	@echo "Role created. Use this ARN with create-function:"
+	@aws iam get-role \
+		--role-name $(FUNCTION_NAME)-execution-role \
+		$(PROFILE_FLAG) \
+		--query 'Role.Arn' \
+		--output text
+
+create-function:
+	@test -f conf.json || (echo "Error: conf.json not found. Copy conf.json.example to conf.json and configure your Domoticz settings." && exit 1)
+	@echo "Installing dependencies..."
+	@npm install --silent
+	@echo "Creating Lambda function $(FUNCTION_NAME)..."
+	@echo "Using role: $(ROLE_ARN)"
+	$(eval GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "unknown"))
+	zip -q -r - domapi.js conf.json domo-code/ node_modules/ \
+		-x '*.swp' -x '*.swo' -x '*~' -x '*.bak' -x '.git/*' -x '.gitignore' \
+		-x 'test-*.js' -x '*.md' -x 'Makefile' -x 'GNUmakefile' -x 'package-lock.json' | \
+		aws lambda create-function \
+			--function-name $(FUNCTION_NAME) \
+			--runtime nodejs22.x \
+			--role $(ROLE_ARN) \
+			--handler domapi.handler \
+			--timeout 80 \
+			--memory-size 512 \
+			--description "Domoticz Alexa Smart Home - $(GIT_VERSION)" \
+			--zip-file fileb:///dev/stdin \
+			$(PROFILE_FLAG) \
+			--region $(AWS_REGION) \
+			--query 'FunctionArn' \
+			--output text
+	@echo "Function created successfully"
+
+add-alexa-permission:
+ifdef SKILL_ID
+	@echo "Adding Alexa Smart Home permission for skill $(SKILL_ID)..."
+	$(eval SKILL_SUFFIX := $(shell echo $(SKILL_ID) | rev | cut -d. -f1 | rev))
+	@aws lambda add-permission \
+		--function-name $(FUNCTION_NAME) \
+		--statement-id alexa-smart-home-$(SKILL_SUFFIX) \
+		--action lambda:InvokeFunction \
+		--principal alexa-connectedhome.amazon.com \
+		--event-source-token $(SKILL_ID) \
+		$(PROFILE_FLAG) \
+		--region $(AWS_REGION) \
+		--query 'Statement' \
+		--output text
+	@echo "Permission added for skill $(SKILL_ID)"
+else
+	@echo "Adding Alexa Smart Home permission for all skills..."
+	@aws lambda add-permission \
+		--function-name $(FUNCTION_NAME) \
+		--statement-id alexa-smart-home \
+		--action lambda:InvokeFunction \
+		--principal alexa-connectedhome.amazon.com \
+		$(PROFILE_FLAG) \
+		--region $(AWS_REGION) \
+		--query 'Statement' \
+		--output text
+	@echo "Permission added for all Alexa Smart Home skills"
+endif
+
+lambda-status:
+	@echo "=== Lambda Function Status ==="
+	@echo ""
+	@echo "Checking IAM role..."
+	@aws iam get-role --role-name $(shell echo $(ROLE_ARN) | sed 's|.*/||') $(PROFILE_FLAG) --query 'Role.{Name:RoleName,Arn:Arn}' --output table 2>/dev/null || echo "Role not found: $(ROLE_ARN)"
+	@echo ""
+	@echo "Checking Lambda function..."
+	@aws lambda get-function-configuration --function-name $(FUNCTION_NAME) $(PROFILE_FLAG) --region $(AWS_REGION) --query '{Name:FunctionName,Runtime:Runtime,Role:Role,Description:Description,LastModified:LastModified}' --output table 2>/dev/null || echo "Function not found: $(FUNCTION_NAME)"
+	@echo ""
+	@echo "Checking Alexa permissions..."
+	@aws lambda get-policy --function-name $(FUNCTION_NAME) $(PROFILE_FLAG) --region $(AWS_REGION) --query 'Policy' --output text 2>/dev/null | jq -r '.Statement[] | select(.Principal.Service == "alexa-connectedhome.amazon.com") | "StatementId: \(.Sid)\nPrincipal: \(.Principal.Service)\nEventSourceToken: \(.Condition.StringEquals["lambda:EventSourceToken"] // "all skills")"' 2>/dev/null || echo "No Alexa permissions found"
 
 test-discovery:
 	@echo "Testing device discovery..."

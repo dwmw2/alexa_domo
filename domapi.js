@@ -5,6 +5,12 @@ let handleDiscovery = require('./domo-code/Discovery')
 // Lambda handler for Alexa Smart Home API v3
 let func = function (event, context) {
   console.log('Received event:', JSON.stringify(event, null, 2))
+  console.log('Lambda context:', JSON.stringify({
+    functionName: context.functionName,
+    functionVersion: context.functionVersion,
+    invokedFunctionArn: context.invokedFunctionArn,
+    requestId: context.requestId
+  }, null, 2))
   
   // Normalize event structure - ensure we have directive format for v3
   let normalizedEvent = event
