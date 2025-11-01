@@ -1,4 +1,4 @@
-.PHONY: help deploy create-function create-role add-alexa-permission lambda-status test-discovery test-control logs clean show-current-version
+.PHONY: help deploy create-function create-role add-alexa-permission lambda-status test-discovery test-control logs clean show-current-version zip
 
 FUNCTION_NAME ?= domoticz-alexa
 PROFILE ?=
@@ -46,23 +46,34 @@ help:
 	@echo "  ROLE_ARN        - IAM role ARN (default: auto-detected)"
 	@echo "  SKILL_ID        - Alexa skill ID (default: none, allows all skills)"
 
-deploy:
+DOMO_CODE_FILES := $(wildcard domo-code/*.js)
+
+lambda-$(FUNCTION_NAME).zip: domapi.js conf.json package.json $(DOMO_CODE_FILES)
 	@test -f conf.json || (echo "Error: conf.json not found. Copy conf.json.example to conf.json and configure your Domoticz settings." && exit 1)
-	@echo "Installing dependencies..."
-	@npm install --silent
-	@echo "Packaging and deploying Lambda function..."
+	@if command -v npm >/dev/null 2>&1; then \
+		if npm outdated 2>/dev/null | grep -q .; then \
+			echo "Warning: Outdated dependencies detected. Run 'npm install' to update."; \
+			npm outdated || true; \
+		fi; \
+	fi
 	$(eval GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "unknown"))
-	@echo "Version: $(GIT_VERSION)"
-	zip -q -r - domapi.js conf.json domo-code/ node_modules/ \
+	@echo "Creating lambda-$(FUNCTION_NAME).zip (version: $(GIT_VERSION))..."
+	@zip -q -r lambda-$(FUNCTION_NAME).zip domapi.js conf.json domo-code/ node_modules/ \
 		-x '*.swp' -x '*.swo' -x '*~' -x '*.bak' -x '.git/*' -x '.gitignore' \
-		-x 'test-*.js' -x '*.md' -x 'Makefile' -x 'GNUmakefile' -x 'package-lock.json' | \
-		aws lambda update-function-code \
-			--function-name $(FUNCTION_NAME) \
-			--zip-file fileb:///dev/stdin \
-			$(PROFILE_FLAG) \
-			--region $(AWS_REGION) \
-			--query 'LastModified' \
-			--output text
+		-x 'test-*.js' -x '*.md' -x 'Makefile' -x 'GNUmakefile' -x 'package-lock.json'
+
+zip: lambda-$(FUNCTION_NAME).zip
+
+deploy: lambda-$(FUNCTION_NAME).zip
+	@echo "Deploying Lambda function..."
+	$(eval GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "unknown"))
+	@aws lambda update-function-code \
+		--function-name $(FUNCTION_NAME) \
+		--zip-file fileb://lambda-$(FUNCTION_NAME).zip \
+		$(PROFILE_FLAG) \
+		--region $(AWS_REGION) \
+		--query 'LastModified' \
+		--output text
 	@echo "Waiting for function update to complete..."
 	@aws lambda wait function-updated \
 		--function-name $(FUNCTION_NAME) \
@@ -99,29 +110,23 @@ create-role:
 		--query 'Role.Arn' \
 		--output text
 
-create-function:
-	@test -f conf.json || (echo "Error: conf.json not found. Copy conf.json.example to conf.json and configure your Domoticz settings." && exit 1)
-	@echo "Installing dependencies..."
-	@npm install --silent
+create-function: lambda-$(FUNCTION_NAME).zip
 	@echo "Creating Lambda function $(FUNCTION_NAME)..."
 	@echo "Using role: $(ROLE_ARN)"
 	$(eval GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "unknown"))
-	zip -q -r - domapi.js conf.json domo-code/ node_modules/ \
-		-x '*.swp' -x '*.swo' -x '*~' -x '*.bak' -x '.git/*' -x '.gitignore' \
-		-x 'test-*.js' -x '*.md' -x 'Makefile' -x 'GNUmakefile' -x 'package-lock.json' | \
-		aws lambda create-function \
-			--function-name $(FUNCTION_NAME) \
-			--runtime nodejs22.x \
-			--role $(ROLE_ARN) \
-			--handler domapi.handler \
-			--timeout 80 \
-			--memory-size 512 \
-			--description "Domoticz Alexa Smart Home - $(GIT_VERSION)" \
-			--zip-file fileb:///dev/stdin \
-			$(PROFILE_FLAG) \
-			--region $(AWS_REGION) \
-			--query 'FunctionArn' \
-			--output text
+	@aws lambda create-function \
+		--function-name $(FUNCTION_NAME) \
+		--runtime nodejs22.x \
+		--role $(ROLE_ARN) \
+		--handler domapi.handler \
+		--timeout 80 \
+		--memory-size 512 \
+		--description "Domoticz Alexa Smart Home - $(GIT_VERSION)" \
+		--zip-file fileb://lambda-$(FUNCTION_NAME).zip \
+		$(PROFILE_FLAG) \
+		--region $(AWS_REGION) \
+		--query 'FunctionArn' \
+		--output text
 	@echo "Function created successfully"
 
 add-alexa-permission:
@@ -167,27 +172,27 @@ lambda-status:
 
 test-discovery:
 	@echo "Testing device discovery..."
-	@echo '{"directive":{"header":{"namespace":"Alexa.Discovery","name":"Discover","payloadVersion":"3","messageId":"test"},"payload":{"scope":{"type":"BearerToken","token":"test"}}}}' > /tmp/discovery-payload.json
+	@echo '{"directive":{"header":{"namespace":"Alexa.Discovery","name":"Discover","payloadVersion":"3","messageId":"test"},"payload":{"scope":{"type":"BearerToken","token":"test"}}}}' > discovery-payload.json
 	@aws lambda invoke \
 		--function-name $(FUNCTION_NAME) \
-		--payload file:///tmp/discovery-payload.json \
+		--payload file://discovery-payload.json \
 		$(PROFILE_FLAG) \
 		--region $(AWS_REGION) \
-		/tmp/discovery-response.json > /dev/null
-	@jq '.event.payload.endpoints | length' /tmp/discovery-response.json | \
+		discovery-response.json > /dev/null
+	@jq '.event.payload.endpoints | length' discovery-response.json | \
 		xargs -I {} echo "Discovered {} devices"
-	@jq -r '.event.payload.endpoints[].friendlyName' /tmp/discovery-response.json | sort
+	@jq -r '.event.payload.endpoints[].friendlyName' discovery-response.json | sort
 
 test-control:
 	@echo "Testing device control (Study light on)..."
-	@echo '{"directive":{"header":{"namespace":"Alexa.PowerController","name":"TurnOn","payloadVersion":"3","messageId":"test","correlationToken":"test"},"endpoint":{"scope":{"type":"BearerToken","token":"test"},"endpointId":"770","cookie":{"WhatAmI":"light"}},"payload":{}}}' > /tmp/control-payload.json
+	@echo '{"directive":{"header":{"namespace":"Alexa.PowerController","name":"TurnOn","payloadVersion":"3","messageId":"test","correlationToken":"test"},"endpoint":{"scope":{"type":"BearerToken","token":"test"},"endpointId":"770","cookie":{"WhatAmI":"light"}},"payload":{}}}' > control-payload.json
 	@aws lambda invoke \
 		--function-name $(FUNCTION_NAME) \
-		--payload file:///tmp/control-payload.json \
+		--payload file://control-payload.json \
 		$(PROFILE_FLAG) \
 		--region $(AWS_REGION) \
-		/tmp/control-response.json > /dev/null
-	@jq '.' /tmp/control-response.json
+		control-response.json > /dev/null
+	@jq '.' control-response.json
 
 logs:
 	@echo "Fetching recent CloudWatch logs..."
@@ -208,4 +213,4 @@ show-current-version:
 		--output text
 
 clean:
-	rm -f /tmp/discovery-payload.json /tmp/discovery-response.json /tmp/control-payload.json /tmp/control-response.json
+	rm -f discovery-payload.json discovery-response.json control-payload.json control-response.json lambda-$(FUNCTION_NAME).zip

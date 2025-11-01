@@ -2,3 +2,6 @@ conf.json
 conf.json*
 !conf.json.example
 GNUmakefile
+lambda-*.zip
+*-payload.json
+*-response.json
