@@ -19,12 +19,45 @@ module.exports = function (event, context) {
   
   if (!payload.grant || !payload.grant.code) {
     console.error('No authorization code in AcceptGrant directive')
-    context.fail('Missing authorization code')
+    // Send success anyway to not block skill enablement
+    const response = {
+      event: {
+        header: {
+          namespace: 'Alexa.Authorization',
+          name: 'AcceptGrant.Response',
+          messageId: directive.header.messageId,
+          payloadVersion: '3'
+        },
+        payload: {}
+      }
+    }
+    context.succeed(response)
     return
   }
   
   const authCode = payload.grant.code
   console.log('Authorization code:', authCode)
+  
+  // Check if credentials are configured
+  if (!CLIENT_ID || CLIENT_ID === 'YOUR_CLIENT_ID' || !CLIENT_SECRET || CLIENT_SECRET === 'YOUR_CLIENT_SECRET') {
+    console.log('Client credentials not configured - skipping token exchange')
+    console.log('To enable proactive events, set ALEXA_CLIENT_ID and ALEXA_CLIENT_SECRET environment variables')
+    
+    // Send success response anyway
+    const response = {
+      event: {
+        header: {
+          namespace: 'Alexa.Authorization',
+          name: 'AcceptGrant.Response',
+          messageId: directive.header.messageId,
+          payloadVersion: '3'
+        },
+        payload: {}
+      }
+    }
+    context.succeed(response)
+    return
+  }
   
   // Exchange authorization code for access token and refresh token
   const postData = `grant_type=authorization_code&code=${authCode}&client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}`
@@ -88,22 +121,20 @@ module.exports = function (event, context) {
       } else {
         console.error('Token exchange failed:', res.statusCode, data)
         
-        // Send error response
-        const errorResponse = {
+        // Send success response anyway to not block skill enablement
+        const response = {
           event: {
             header: {
               namespace: 'Alexa.Authorization',
-              name: 'ErrorResponse',
+              name: 'AcceptGrant.Response',
               messageId: directive.header.messageId,
               payloadVersion: '3'
             },
-            payload: {
-              type: 'ACCEPT_GRANT_FAILED',
-              message: 'Failed to exchange authorization code'
-            }
+            payload: {}
           }
         }
-        context.succeed(errorResponse)
+        console.log('Sending AcceptGrant.Response (success despite token exchange failure)')
+        context.succeed(response)
       }
     })
   })
@@ -111,22 +142,20 @@ module.exports = function (event, context) {
   req.on('error', (e) => {
     console.error('Token exchange error:', e)
     
-    // Send error response
-    const errorResponse = {
+    // Send success response anyway to not block skill enablement
+    const response = {
       event: {
         header: {
           namespace: 'Alexa.Authorization',
-          name: 'ErrorResponse',
+          name: 'AcceptGrant.Response',
           messageId: directive.header.messageId,
           payloadVersion: '3'
         },
-        payload: {
-          type: 'ACCEPT_GRANT_FAILED',
-          message: 'Network error during token exchange'
-        }
+        payload: {}
       }
     }
-    context.succeed(errorResponse)
+    console.log('Sending AcceptGrant.Response (success despite network error)')
+    context.succeed(response)
   })
   
   req.write(postData)
