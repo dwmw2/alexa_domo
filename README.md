@@ -2,6 +2,8 @@
 
 This integration allows you to control your Domoticz devices through Amazon Alexa using the Alexa Smart Home API v3.
 
+Since 2023, Domoticz includes a built-in OAuth2 server that works with Alexa's account linking. The Lambda function will use the JWT tokens issued by Domoticz to authenticate API requests.
+
 ## Features
 
 - Control lights (on/off, dimming)
@@ -15,11 +17,9 @@ This integration allows you to control your Domoticz devices through Amazon Alex
 
 ## Requirements
 
-- **Domoticz home automation system** - Your Domoticz instance must be accessible from the Lambda function over Legacy IP. Lambda functions cannot use IPv6 without additional VPC configuration complexity. Ensure your Domoticz server is reachable via a Legacy IP address (either publicly accessible, through a VPN, or via a dual-stack reverse proxy)
-- **SSL Certificate from approved authority** - Domoticz must use HTTPS with a certificate from a recognized Certificate Authority. Self-signed certificates will not work. LetsEncrypt certificates work well and are free
+- **Domoticz home automation system** - Your Domoticz instance must be accessible from the Lambda function over Legacy IP, with a valid SSL certificate.
 - **Amazon Developer Account** - Sign up at [developer.amazon.com](https://developer.amazon.com) to create your Alexa Smart Home skill
-- **AWS Account** - Needed to host the Lambda function that bridges Alexa and Domoticz. AWS Lambda offers a free tier with 1 million requests per month, which is more than sufficient for typical home automation use
-- **Node.js and npm** (optional) - Only needed if you want to update dependencies. The required dependencies are already included in the repository
+- **AWS Account** - Needed to host the Lambda function that bridges Alexa and Domoticz. AWS Lambda offers a free tier with 1 million requests per month, which is more than sufficient for typical home automation use.
 
 ## Installation
 
@@ -27,7 +27,7 @@ This integration allows you to control your Domoticz devices through Amazon Alex
 
 Before setting up the Alexa skill, ensure your Domoticz instance is properly configured:
 
-1. **Network accessibility** - Your Domoticz instance must be accessible from the internet via Legacy IP (IPv4). Lambda functions cannot use IPv6 without additional VPC configuration.
+1. **Network accessibility** - Your Domoticz instance must be accessible from the internet via Legacy IP, as Lambda functions cannot use IPv6 without additional VPC configuration. You may need to configure port forwarding on your router.
 
 2. **Valid SSL certificate** - Domoticz must use HTTPS with a certificate from a recognized Certificate Authority. Self-signed certificates will not work. LetsEncrypt certificates work well and are free.
 
@@ -40,7 +40,7 @@ Before setting up the Alexa skill, ensure your Domoticz instance is properly con
 4. **Assign devices to room plans** - Each device you want to control via Alexa must be assigned to a room plan in Domoticz.
 
 5. **Configure OAuth2 application**:
-   - Ensure Domoticz is started with the `-vhostname` option to use the correct hostname in OAuth2 tokens (e.g., `-vhostname your-domoticz-host.example.com`)
+   - Ensure Domoticz is started with the `-vhostname` option to use the correct hostname in OAuth2 tokens (e.g., `-vhostname your-domoticz-host.example.com`). Check that the correct hostname appears in the URLs returned from https://your-domoticz-host.example.com/.well-known/openid-configuration and that those URLs are reachable from the outside.
    - Go to Setup → Applications
    - Click "Add Application"
    - Application Name: `domoticz-alexa` (or your preferred name)
@@ -65,7 +65,7 @@ Leave this browser tab open — you'll return to complete the skill setup after 
 
 ### Create an AWS Lambda Function
 
-You can create the Lambda function using the Makefile (if you have the AWS CLI configured) or through the AWS Console in your web browser.
+It's easiest to create the Lambda function using the Makefile if you have the AWS CLI configured, or you can do it through the AWS Console in your web browser.
 
 **Using the Makefile:**
 
@@ -78,7 +78,7 @@ You can create the Lambda function using the Makefile (if you have the AWS CLI c
    make add-alexa-permission
    ```
 
-To deploy code updates later, run:
+To deploy code updates later, you can run:
 ```bash
 make deploy
 ```
@@ -129,8 +129,6 @@ Return to the Alexa Developer Console browser tab from earlier. You should be in
    - Small Skill Icon (108x108 px): Upload `icons/app_icon.png`
    - Large Skill Icon (512x512 px): Upload `icons/app_icon_large.png`
    - Click "Save"
-
-Note: Domoticz includes a built-in OAuth2 server that works with Alexa's account linking. The Lambda function will use the JWT tokens issued by Domoticz to authenticate API requests.
 
 ### Enable the Skill
 
@@ -262,14 +260,6 @@ Test device control:
 node test-control.js
 ```
 
-### Deployment
-
-Deploy updates to Lambda:
-```bash
-zip -r lambda.zip domapi.js conf.json domo-code/ node_modules/
-aws lambda update-function-code --function-name geosdomo --zip-file fileb://lambda.zip
-```
-
 ### Logging
 
 CloudWatch logs show:
@@ -280,7 +270,7 @@ CloudWatch logs show:
 
 View logs:
 ```bash
-aws logs tail /aws/lambda/geosdomo --follow
+aws logs tail /aws/lambda/domoticz-alexa --follow
 ```
 
 ## Architecture
@@ -313,3 +303,7 @@ This project is provided as-is for personal use.
 ## Contributing
 
 Contributions are welcome! Please test thoroughly before submitting pull requests.
+
+## Credit
+
+This is based on the original [alexa_domo](https://github.com/madgeni/alexa_domo) project from Nick Madge.
