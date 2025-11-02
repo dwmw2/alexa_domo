@@ -17,6 +17,14 @@ class Domoticz {
       try {
         // Decode JWT payload (second part)
         const payload = JSON.parse(Buffer.from(bearerToken.split('.')[1], 'base64').toString())
+        
+        // Log token lifetime
+        if (payload.exp) {
+          const now = Math.floor(Date.now() / 1000)
+          const remaining = payload.exp - now
+          console.log(`JWT token expires in ${remaining} seconds (${Math.floor(remaining / 60)} minutes)`)
+        }
+        
         if (payload.iss) {
           // Extract hostname and port from issuer URL
           const url = new URL(payload.iss)
