@@ -23,6 +23,9 @@ module.exports = function (event, context) {
     return
   }
   
+  // Extract bearer token from endpoint scope
+  const bearerToken = endpoint.scope?.token
+  
   const endpointId = endpoint.endpointId
   const cookie = endpoint.cookie || {}
   const what = cookie.WhatAmI
@@ -73,7 +76,7 @@ module.exports = function (event, context) {
       // Check if this is a scene/group
       if (what === 'scene') {
         let sceneIdx = cookie.SceneIDX
-        ctrlScene(sceneIdx, funcName, function (callback) {
+        ctrlScene(sceneIdx, funcName, bearerToken, function (callback) {
           if (callback === 'Err') {
             context.succeed(buildErrorResponse('ErrorResponse', 'Scene control failed'))
             return
@@ -88,7 +91,7 @@ module.exports = function (event, context) {
           context.succeed(buildResponse(properties))
         })
       } else {
-        ctrlDev('switch', deviceId, funcName, function (callback) {
+        ctrlDev('switch', deviceId, funcName, bearerToken, function (callback) {
           if (callback === 'Err') {
             context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
             return
@@ -109,7 +112,7 @@ module.exports = function (event, context) {
       if (name === 'SetBrightness') {
         let brightness = payload.brightness
         let dimLevel = brightness / (100 / maxDimLevel)
-        ctrlDev('dimmable', deviceId, dimLevel, function (callback) {
+        ctrlDev('dimmable', deviceId, dimLevel, bearerToken, function (callback) {
           if (callback === 'Err') {
             context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
             return
@@ -125,11 +128,11 @@ module.exports = function (event, context) {
         })
       } else if (name === 'AdjustBrightness') {
         let delta = payload.brightnessDelta
-        getDev(deviceId, what, function (returnme) {
+        getDev(deviceId, what, bearerToken, function (returnme) {
           let current = parseInt(returnme)
           let newBrightness = Math.max(0, Math.min(100, current + delta))
           let dimLevel = newBrightness / (100 / maxDimLevel)
-          ctrlDev('dimmable', deviceId, dimLevel, function (callback) {
+          ctrlDev('dimmable', deviceId, dimLevel, bearerToken, function (callback) {
             if (callback === 'Err') {
               context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
               return
@@ -151,9 +154,13 @@ module.exports = function (event, context) {
       let hue = payload.color.hue
       let saturation = payload.color.saturation
       let brightness = payload.color.brightness
-      let hex = hsl(hue, saturation, brightness).replace(/^#/, '')
+      console.log(`Color request - HSL: hue=${hue}, saturation=${saturation}, brightness=${brightness}`)
+      // hsl-to-hex expects saturation and lightness as percentages (0-100)
+      // Use 50% lightness to get pure colors (100% would be white, 0% would be black)
+      let hex = hsl(hue, saturation * 100, 50).replace(/^#/, '')
+      console.log(`Converted to hex: ${hex}`)
       
-      ctrlColour(endpointId, hex, brightness, function (callback) {
+      ctrlColour(endpointId, hex, bearerToken, function (callback) {
         if (callback === 'Err') {
           context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
           return
@@ -172,7 +179,7 @@ module.exports = function (event, context) {
     case 'Alexa.ColorTemperatureController':
       if (name === 'SetColorTemperature') {
         let kelvin = payload.colorTemperatureInKelvin
-        ctrlKelvin(endpointId, kelvin, function (callback) {
+        ctrlKelvin(endpointId, kelvin, bearerToken, function (callback) {
           if (callback === 'Err') {
             context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
             return
@@ -191,7 +198,7 @@ module.exports = function (event, context) {
 
     case 'Alexa.SceneController':
       let sceneIdx = cookie.SceneIDX
-      ctrlScene(sceneIdx, 'On', function (callback) {
+      ctrlScene(sceneIdx, 'On', bearerToken, function (callback) {
         if (callback === 'Err') {
           context.succeed(buildErrorResponse('ErrorResponse', 'Scene activation failed'))
           return
@@ -215,7 +222,7 @@ module.exports = function (event, context) {
     case 'Alexa.LockController':
       if (name === 'Lock' || name === 'Unlock') {
         let lockFunc = name === 'Lock' ? 'On' : 'Off'
-        ctrlDev(switchtype, deviceId, lockFunc, function (callback) {
+        ctrlDev(switchtype, deviceId, lockFunc, bearerToken, function (callback) {
           if (callback === 'Err') {
             context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
             return
@@ -236,7 +243,7 @@ module.exports = function (event, context) {
       if (name === 'SetTargetTemperature') {
         let temp = payload.targetSetpoint.value
         const targetIdx = cookie.setpointDeviceIdx || endpointId
-        ctrlTemp(targetIdx, temp, function (callback) {
+        ctrlTemp(targetIdx, temp, bearerToken, function (callback) {
           if (callback === 'Err') {
             context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
             return
@@ -253,10 +260,10 @@ module.exports = function (event, context) {
       } else if (name === 'AdjustTargetTemperature') {
         let delta = payload.targetSetpointDelta.value
         const targetIdx = cookie.setpointDeviceIdx || endpointId
-        getDev(targetIdx, 'temp', function (returnme) {
+        getDev(targetIdx, 'temp', bearerToken, function (returnme) {
           let current = parseFloat(returnme.value1)
           let newTemp = current + delta
-          ctrlTemp(targetIdx, newTemp, function (callback) {
+          ctrlTemp(targetIdx, newTemp, bearerToken, function (callback) {
             if (callback === 'Err') {
               context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
               return
@@ -286,7 +293,7 @@ module.exports = function (event, context) {
           return
         }
         
-        ctrlDev('dimmable', deviceId, level, function (callback) {
+        ctrlDev('dimmable', deviceId, level, bearerToken, function (callback) {
           if (callback === 'Err') {
             context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
             return
@@ -303,7 +310,7 @@ module.exports = function (event, context) {
         })
       } else if (name === 'AdjustMode') {
         
-        getDev(deviceId, 'light', function (currentLevel) {
+        getDev(deviceId, 'light', bearerToken, function (currentLevel) {
           const currentIndex = Math.round(parseInt(currentLevel) / 10)
           let newIndex = currentIndex + modeDelta
           
@@ -312,7 +319,7 @@ module.exports = function (event, context) {
           if (newIndex >= modes.length) newIndex = 0
           
           const level = newIndex * 10
-          ctrlDev('dimmable', deviceId, level, function (callback) {
+          ctrlDev('dimmable', deviceId, level, bearerToken, function (callback) {
             if (callback === 'Err') {
               context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
               return
@@ -370,7 +377,7 @@ module.exports = function (event, context) {
           
           // Get setpoint if device has thermostat capability
           if (cookie.setpointDeviceIdx || cookie.tempDeviceIdx) {
-            getDev(setpointIdx, 'temp', function (setpointData) {
+            getDev(setpointIdx, 'temp', bearerToken, function (setpointData) {
               if (setpointData !== 'Err' && setpointData.value1 !== undefined) {
                 properties.push({
                   namespace: 'Alexa.ThermostatController',
@@ -390,7 +397,7 @@ module.exports = function (event, context) {
               }
               
               // Get temperature reading
-              getDev(tempIdx, 'temp', function (tempData) {
+              getDev(tempIdx, 'temp', bearerToken, function (tempData) {
                 if (tempData !== 'Err' && tempData.value1 !== undefined) {
                   properties.push({
                     namespace: 'Alexa.TemperatureSensor',
@@ -405,7 +412,7 @@ module.exports = function (event, context) {
             })
           } else {
             // Standalone temperature sensor
-            getDev(deviceId, 'temp', function (tempData) {
+            getDev(deviceId, 'temp', bearerToken, function (tempData) {
               if (tempData !== 'Err' && tempData.value1 !== undefined) {
                 properties.push({
                   namespace: 'Alexa.TemperatureSensor',
@@ -420,7 +427,7 @@ module.exports = function (event, context) {
           }
         } else if (what === 'humidity') {
           // Get temperature and/or humidity
-          getDev(deviceId, what, function (data) {
+          getDev(deviceId, what, bearerToken, function (data) {
             if (data !== 'Err' && data.value1) {
               properties.push({
                 namespace: 'Alexa.TemperatureSensor',
@@ -443,7 +450,7 @@ module.exports = function (event, context) {
           })
         } else if (what === 'light') {
           // Get power state and brightness
-          getDev(deviceId, what, function (data) {
+          getDev(deviceId, what, bearerToken, function (data) {
             if (data !== 'Err') {
               const level = parseInt(data)
               properties.push({
@@ -467,7 +474,7 @@ module.exports = function (event, context) {
           })
         } else if (what === 'selector') {
           // Get current mode
-          getDev(deviceId, 'light', function (data) {
+          getDev(deviceId, 'light', bearerToken, function (data) {
             if (data !== 'Err') {
               const level = parseInt(data)
               const deviceName = cookie.deviceName || 'Device'
@@ -489,7 +496,7 @@ module.exports = function (event, context) {
           })
         } else if (what === 'weight') {
           // Get weight reading
-          getDev(deviceId, what, function (data) {
+          getDev(deviceId, what, bearerToken, function (data) {
             if (data !== 'Err') {
               properties.push({
                 namespace: 'Alexa.RangeController',
@@ -504,7 +511,7 @@ module.exports = function (event, context) {
           })
         } else if (what === 'general') {
           // Get general sensor reading
-          getDev(deviceId, what, function (data) {
+          getDev(deviceId, what, bearerToken, function (data) {
             if (data !== 'Err') {
               const value = parseFloat(data)
               

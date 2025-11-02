@@ -2,15 +2,6 @@
 'use strict'
 
 const Domoticz = require('./domoticz')
-
-const conf = require('../conf.json')
-const api = new Domoticz({
-  protocol: conf.protocol,
-  host: conf.host,
-  port: conf.port,
-  username: conf.username,
-  password: conf.password
-})
 let log = require('./logger')
 const makeHeader = require('./HeaderGen')
 const handleError = require('./handleError')
@@ -19,6 +10,12 @@ module.exports = function (event, context, passBack) {
   const endpoints = []
   const headers = makeHeader(event, 'Discover.Response', 'Alexa.Discovery')
   
+  // Extract bearer token from event
+  const bearerToken = event.payload?.scope?.token
+  
+  // Create Domoticz instance with bearer token
+  const api = new Domoticz(bearerToken)
+  
   api.getDevices({}, function (err, devices) {
     if (err) {
       console.log('Error fetching devices from Domoticz:', err)
@@ -26,13 +23,13 @@ module.exports = function (event, context, passBack) {
       handleError(event, context, 'TargetBridgeConnectivityUnstableError')
       return
     }
-    console.log('Fetched', devices.result.length, 'devices from Domoticz')
-    const devArray = devices.result
+    const devArray = devices.result || []
+    console.log('Fetched', devArray.length, 'devices from Domoticz')
     const linkedDevices = new Set() // Track devices that are linked and should be hidden
     
     // First pass: find linked setpoint/temperature pairs
     const setpointLinks = new Map()
-    if (devArray) {
+    if (devArray.length > 0) {
       devArray.forEach(device => {
         if (device.Type === 'Thermostat' && (device.PlanID !== '0' && device.PlanID !== '')) {
           const baseName = device.Name.replace(/\s+(Setpoint|SetPoint)$/i, '')
@@ -128,7 +125,7 @@ module.exports = function (event, context, passBack) {
             SceneIDX: device.idx
           }
           endpoints.push(endpoint)
-        } else if (devType.startsWith('Light')) {
+        } else if (devType.startsWith('Light') || devType.startsWith('Color Switch')) {
           // Check if this is a Selector switch (input selector, not a light)
           if (setSwitch === 'Selector' && device.LevelNames) {
             // Decode level names from base64
@@ -249,6 +246,20 @@ module.exports = function (event, context, passBack) {
                 version: '3',
                 properties: {
                   supported: [{ name: 'brightness' }],
+                  proactivelyReported: false,
+                  retrievable: true
+                }
+              })
+            }
+            
+            // Add color control for Color Switch devices
+            if (devType.startsWith('Color Switch')) {
+              endpoint.capabilities.push({
+                type: 'AlexaInterface',
+                interface: 'Alexa.ColorController',
+                version: '3',
+                properties: {
+                  supported: [{ name: 'color' }],
                   proactivelyReported: false,
                   retrievable: true
                 }

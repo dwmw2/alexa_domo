@@ -1,11 +1,14 @@
 .PHONY: help deploy create-function create-role add-alexa-permission lambda-status test-discovery test-control logs clean show-current-version zip
 
+# Name of your Lambda function in AWS
 FUNCTION_NAME ?= domoticz-alexa
+# AWS CLI profile to use (leave empty for default profile)
 PROFILE ?=
+# AWS region where your Lambda function will be deployed
 AWS_REGION ?= eu-west-1
+# Your Alexa Skill ID (recommended for security, restricts which skills can invoke your Lambda)
 SKILL_ID ?=
 
-# Lazy evaluation - only computed when first used
 ACCOUNT_ID = $(shell aws sts get-caller-identity $(PROFILE_FLAG) --query Account --output text 2>/dev/null)
 ROLE_ARN ?= arn:aws:iam::$(ACCOUNT_ID):role/$(FUNCTION_NAME)-execution-role
 
@@ -119,6 +122,7 @@ create-function: lambda-$(FUNCTION_NAME).zip
 		--runtime nodejs22.x \
 		--role $(ROLE_ARN) \
 		--handler domapi.handler \
+		--architectures arm64 \
 		--timeout 80 \
 		--memory-size 512 \
 		--description "Domoticz Alexa Smart Home - $(GIT_VERSION)" \

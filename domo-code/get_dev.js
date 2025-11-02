@@ -1,18 +1,11 @@
 'use strict'
 
 let Domoticz = require('./domoticz')
-
-let conf = require('../conf.json')
-let api = new Domoticz({
-  protocol: conf.protocol,
-  host: conf.host,
-  port: conf.port,
-  username: conf.username,
-  password: conf.password
-})
 let log = require('./logger')
 
-module.exports = function (idx, devType, sendback) {
+module.exports = function (idx, devType, bearerToken, sendback) {
+  let api = new Domoticz(bearerToken)
+  
   let intRet
   api.getDevice({
     idx: idx

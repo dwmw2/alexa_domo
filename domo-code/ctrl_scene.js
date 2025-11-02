@@ -2,16 +2,9 @@
 
 let Domoticz = require('./domoticz')
 
-let conf = require('../conf.json')
-let api = new Domoticz({
-  protocol: conf.protocol,
-  host: conf.host,
-  port: conf.port,
-  username: conf.username,
-  password: conf.password
-})
-
-module.exports = function (idx, func, sendback) {
+module.exports = function (idx, func, bearerToken, sendback) {
+  let api = new Domoticz(bearerToken)
+  
   let payloads
   api.changeSceneState({
     idx: idx,
