@@ -78,6 +78,11 @@ You can create the Lambda function using the Makefile (if you have the AWS CLI c
    make add-alexa-permission
    ```
 
+To deploy code updates later, run:
+```bash
+make deploy
+```
+
 **Using the AWS Console:**
 
 1. Log in to the [AWS Console](https://console.aws.amazon.com/)
@@ -92,11 +97,16 @@ You can create the Lambda function using the Makefile (if you have the AWS CLI c
 6. In the Configuration tab:
    - Set Timeout to 80 seconds
    - Set Memory to 512 MiB
-7. Click "Add trigger"
-8. Select "Alexa Smart Home"
-9. Enter your Skill ID (found in the Alexa Developer Console under "Skill ID")
-10. Click "Add"
-11. Note your Lambda function ARN (you'll need this later)
+7. In the Code tab, create a zip file and upload it:
+   ```bash
+   make zip
+   ```
+   Then click "Upload from" → ".zip file" and select `lambda-domoticz-alexa.zip`
+8. Click "Add trigger"
+9. Select "Alexa Smart Home"
+10. Enter your Skill ID (found in the Alexa Developer Console under "Skill ID")
+11. Click "Add"
+12. Note your Lambda function ARN (you'll need this later)
 
 ### Complete the Skill Setup
 
@@ -117,36 +127,6 @@ Return to the Alexa Developer Console browser tab from earlier. You should be in
 7. Click "Save"
 
 Note: Domoticz includes a built-in OAuth2 server that works with Alexa's account linking. The Lambda function will use the JWT tokens issued by Domoticz to authenticate API requests.
-
-### Prepare and Deploy the Code
-
-1. Copy the example configuration to `conf.json` and edit it with your Domoticz connection details:
-   ```bash
-   cp conf.json.example conf.json
-   ```
-   ```json
-   {
-     "protocol": "https",
-     "host": "your-domoticz-host.example.com",
-     "port": 8443,
-     "username": "your-username",
-     "password": "your-password"
-   }
-   ```
-
-2. If using the Makefile (recommended):
-   Edit the variables at the top of `Makefile` with your AWS settings, then deploy:
-   ```bash
-   make deploy
-   ```
-
-3. Or deploy manually:
-   ```bash
-   zip -r lambda.zip domapi.js conf.json domo-code/ node_modules/
-   aws lambda update-function-code \
-     --function-name domoticz-alexa \
-     --zip-file fileb://lambda.zip
-   ```
 
 ### Enable the Skill
 
