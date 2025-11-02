@@ -125,6 +125,10 @@ Return to the Alexa Developer Console browser tab from earlier. You should be in
    - Authentication Scheme: Credentials in request body
    - Scope: `profile` (or any value — Domoticz doesn't use scopes but Alexa requires one)
 7. Click "Save"
+8. (Optional) Go to the "Distribution" tab and add skill icons:
+   - Small Skill Icon (108x108 px): Upload `icons/app_icon.png`
+   - Large Skill Icon (512x512 px): Upload `icons/app_icon_large.png`
+   - Click "Save"
 
 Note: Domoticz includes a built-in OAuth2 server that works with Alexa's account linking. The Lambda function will use the JWT tokens issued by Domoticz to authenticate API requests.
 
