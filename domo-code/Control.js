@@ -150,6 +150,48 @@ module.exports = function (event, context) {
       }
       break
 
+    case 'Alexa.PercentageController':
+      if (name === 'SetPercentage') {
+        let percentage = payload.percentage
+        let dimLevel = percentage / (100 / maxDimLevel)
+        ctrlDev('dimmable', deviceId, dimLevel, bearerToken, function (callback) {
+          if (callback === 'Err') {
+            context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
+            return
+          }
+          const properties = [{
+            namespace: 'Alexa.PercentageController',
+            name: 'percentage',
+            value: percentage,
+            timeOfSample: new Date().toISOString(),
+            uncertaintyInMilliseconds: 500
+          }]
+          context.succeed(buildResponse(properties))
+        })
+      } else if (name === 'AdjustPercentage') {
+        let delta = payload.percentageDelta
+        getDev(deviceId, what, bearerToken, function (returnme) {
+          let current = parseInt(returnme)
+          let newPercentage = Math.max(0, Math.min(100, current + delta))
+          let dimLevel = newPercentage / (100 / maxDimLevel)
+          ctrlDev('dimmable', deviceId, dimLevel, bearerToken, function (callback) {
+            if (callback === 'Err') {
+              context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
+              return
+            }
+            const properties = [{
+              namespace: 'Alexa.PercentageController',
+              name: 'percentage',
+              value: newPercentage,
+              timeOfSample: new Date().toISOString(),
+              uncertaintyInMilliseconds: 500
+            }]
+            context.succeed(buildResponse(properties))
+          })
+        })
+      }
+      break
+
     case 'Alexa.ColorController':
       let hue = payload.color.hue
       let saturation = payload.color.saturation
@@ -464,6 +506,30 @@ module.exports = function (event, context) {
                 properties.push({
                   namespace: 'Alexa.BrightnessController',
                   name: 'brightness',
+                  value: level,
+                  timeOfSample: new Date().toISOString(),
+                  uncertaintyInMilliseconds: 500
+                })
+              }
+            }
+            context.succeed(buildReportStateResponse(properties))
+          })
+        } else if (what === 'blind') {
+          // Get power state and percentage
+          getDev(deviceId, 'light', bearerToken, function (data) {
+            if (data !== 'Err') {
+              const level = parseInt(data)
+              properties.push({
+                namespace: 'Alexa.PowerController',
+                name: 'powerState',
+                value: level > 0 ? 'ON' : 'OFF',
+                timeOfSample: new Date().toISOString(),
+                uncertaintyInMilliseconds: 500
+              })
+              if (maxDimLevel) {
+                properties.push({
+                  namespace: 'Alexa.PercentageController',
+                  name: 'percentage',
                   value: level,
                   timeOfSample: new Date().toISOString(),
                   uncertaintyInMilliseconds: 500

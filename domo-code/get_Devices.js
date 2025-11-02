@@ -294,11 +294,22 @@ module.exports = function (event, context, passBack) {
             },
             {
               type: 'AlexaInterface',
+              interface: 'Alexa.PercentageController',
+              version: '3',
+              properties: {
+                supported: [{ name: 'percentage' }],
+                proactivelyReported: false,
+                retrievable: true
+              }
+            },
+            {
+              type: 'AlexaInterface',
               interface: 'Alexa',
               version: '3'
             }
           ]
           endpoint.cookie = {
+            maxDimLevel: device.MaxDimLevel,
             switchis: setSwitch,
             WhatAmI: 'blind'
           }
