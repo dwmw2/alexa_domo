@@ -30,7 +30,7 @@ module.exports = function (event, context, passBack) {
     if (devArray) {
       for (let i = 0; i < devArray.length; i++) {
         const device = devArray[i]
-        log('device detail is: ', device)
+        //log('device detail is: ', device)
                 // Omit devices which aren't in a room plan
        if (device.planID === '0' || device.planID === '') { continue }
 
@@ -41,6 +41,7 @@ module.exports = function (event, context, passBack) {
         if (device.switchType !== null){
           setSwitch = device.switchType
         }
+        log('empty payload: ', appliances)
 
        // console.log(setSwitch)
         let devName = device.name
@@ -54,8 +55,8 @@ module.exports = function (event, context, passBack) {
             devName = match[1].trim()
           }
         }
-        // let msg = ("device is - ", device.name, " & description", devName);
-          // log("device info", msg);
+         let msg = ("device is - ", device.name, " & description", devName);
+           log("device info", msg);
         let appliancename = {
           applianceId: device.idx,
           manufacturerName: device.hardwareName,
@@ -79,6 +80,7 @@ module.exports = function (event, context, passBack) {
             WhatAmI: 'scene',
             SceneIDX: parseInt(device.idx) + 200
           })
+          log('pushing: ', appliancename)
           appliances.push(appliancename)
         } else if (devType.startsWith('Light')) {
           appliancename.actions = ([
@@ -95,6 +97,7 @@ module.exports = function (event, context, passBack) {
             switchis: setSwitch,
             WhatAmI: 'light'
           })
+          log('pushing: ', appliancename)
           appliances.push(appliancename)
         } else if (devType.startsWith('Blind') || devType.startsWith('RFY')) {
           appliancename.actions = ([
@@ -105,6 +108,7 @@ module.exports = function (event, context, passBack) {
             switchis: setSwitch,
             WhatAmI: 'blind'
           })
+          log('pushing: ', appliancename)
           appliances.push(appliancename)
         } else if (devType.startsWith('Lock') || devType.startsWith('Contact')) {
           appliancename.actions = ([
@@ -115,6 +119,7 @@ module.exports = function (event, context, passBack) {
             switchis: setSwitch,
             WhatAmI: 'lock'
           })
+          log('pushing: ', appliancename)
           appliances.push(appliancename)
         } else if (devType.startsWith('Temp') || devType.startsWith('Therm')) {
           appliancename.version = 'temp'
@@ -128,11 +133,12 @@ module.exports = function (event, context, passBack) {
           appliancename.additionalApplianceDetails = ({
             WhatAmI: 'temp'
           })
+          log('pushing: ', appliancename)
           appliances.push(appliancename)
         }
       }
     }
-    //  log('payload: ', appliances)
+    log('payload: ', appliances)
     const payloads = {
       discoveredAppliances: appliances
     }
