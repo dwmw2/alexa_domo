@@ -125,7 +125,8 @@ Return to the Alexa Developer Console browser tab from earlier. You should be in
    - Authentication Scheme: Credentials in request body
    - Scope: `profile` (or any value — Domoticz doesn't use scopes but Alexa requires one)
 7. Click "Save"
-8. (Optional) Go to the "Distribution" tab and add skill icons:
+8. (Optional) Go to your skill's "Permissions" section and enable "Send Alexa Events". We do not support this yet, but we hope to add it in future.
+9. (Optional) Go to the "Distribution" tab and add skill icons:
    - Small Skill Icon (108x108 px): Upload `icons/app_icon.png`
    - Large Skill Icon (512x512 px): Upload `icons/app_icon_large.png`
    - Click "Save"

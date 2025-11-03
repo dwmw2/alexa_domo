@@ -1,6 +1,7 @@
 'use strict'
 let handleControl = require('./domo-code/Control')
 let handleDiscovery = require('./domo-code/Discovery')
+let handleAcceptGrant = require('./domo-code/AcceptGrant')
 
 // Lambda handler for Alexa Smart Home API v3
 let func = function (event, context) {
@@ -48,19 +49,7 @@ let func = function (event, context) {
     handleDiscovery(normalizedEvent, context)
   } else if (namespace === 'Alexa.Authorization') {
     console.log('Handling authorization request')
-    // AcceptGrant directive - just acknowledge it
-    const response = {
-      event: {
-        header: {
-          namespace: 'Alexa.Authorization',
-          name: 'AcceptGrant.Response',
-          messageId: header.messageId,
-          payloadVersion: '3'
-        },
-        payload: {}
-      }
-    }
-    context.succeed(response)
+    handleAcceptGrant(normalizedEvent, context)
   } else if (namespace.startsWith('Alexa')) {
     console.log('Handling control request')
     // All other Alexa.* namespaces are control/query operations
