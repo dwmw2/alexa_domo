@@ -73,8 +73,31 @@ module.exports = function (event, context) {
   switch (namespace) {
     case 'Alexa.PowerController':
       let funcName = name === 'TurnOn' ? 'On' : 'Off'
-      // Check if this is a scene/group
-      if (what === 'scene') {
+      // Check if this is a blind - use Stop command
+      if (what === 'blind') {
+        ctrlDev('switch', deviceId, 'Stop', bearerToken, function (callback) {
+          if (callback === 'Err') {
+            context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
+            return
+          }
+          // Return current position after stop
+          getDev(deviceId, 'light', bearerToken, function (data) {
+            const properties = []
+            if (data !== 'Err') {
+              const level = parseInt(data)
+              properties.push({
+                namespace: 'Alexa.RangeController',
+                instance: 'Blind.Lift',
+                name: 'rangeValue',
+                value: level,
+                timeOfSample: new Date().toISOString(),
+                uncertaintyInMilliseconds: 500
+              })
+            }
+            context.succeed(buildResponse(properties))
+          })
+        })
+      } else if (what === 'scene') {
         let sceneIdx = cookie.SceneIDX
         ctrlScene(sceneIdx, funcName, bearerToken, function (callback) {
           if (callback === 'Err') {
@@ -515,26 +538,17 @@ module.exports = function (event, context) {
             context.succeed(buildReportStateResponse(properties))
           })
         } else if (what === 'blind') {
-          // Get power state and percentage
           getDev(deviceId, 'light', bearerToken, function (data) {
             if (data !== 'Err') {
               const level = parseInt(data)
               properties.push({
-                namespace: 'Alexa.PowerController',
-                name: 'powerState',
-                value: level > 0 ? 'ON' : 'OFF',
+                namespace: 'Alexa.RangeController',
+                instance: 'Blind.Lift',
+                name: 'rangeValue',
+                value: level,
                 timeOfSample: new Date().toISOString(),
                 uncertaintyInMilliseconds: 500
               })
-              if (maxDimLevel) {
-                properties.push({
-                  namespace: 'Alexa.PercentageController',
-                  name: 'percentage',
-                  value: level,
-                  timeOfSample: new Date().toISOString(),
-                  uncertaintyInMilliseconds: 500
-                })
-              }
             }
             context.succeed(buildReportStateResponse(properties))
           })
@@ -613,6 +627,52 @@ module.exports = function (event, context) {
           })
         } else {
           context.succeed(buildErrorResponse('ErrorResponse', 'State report not supported for this device'))
+        }
+      }
+      break
+
+    case 'Alexa.RangeController':
+      if (what === 'blind') {
+        if (name === 'SetRangeValue') {
+          const rangeValue = payload.rangeValue
+          const dimLevel = rangeValue / (100 / maxDimLevel)
+          ctrlDev('dimmable', deviceId, dimLevel, bearerToken, function (callback) {
+            if (callback === 'Err') {
+              context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
+              return
+            }
+            const properties = [{
+              namespace: 'Alexa.RangeController',
+              instance: 'Blind.Lift',
+              name: 'rangeValue',
+              value: rangeValue,
+              timeOfSample: new Date().toISOString(),
+              uncertaintyInMilliseconds: 500
+            }]
+            context.succeed(buildResponse(properties))
+          })
+        } else if (name === 'AdjustRangeValue') {
+          const delta = payload.rangeValueDelta
+          getDev(deviceId, 'light', bearerToken, function (returnme) {
+            const current = parseInt(returnme)
+            const newValue = Math.max(0, Math.min(100, current + delta))
+            const dimLevel = newValue / (100 / maxDimLevel)
+            ctrlDev('dimmable', deviceId, dimLevel, bearerToken, function (callback) {
+              if (callback === 'Err') {
+                context.succeed(buildErrorResponse('ErrorResponse', 'Device offline'))
+                return
+              }
+              const properties = [{
+                namespace: 'Alexa.RangeController',
+                instance: 'Blind.Lift',
+                name: 'rangeValue',
+                value: newValue,
+                timeOfSample: new Date().toISOString(),
+                uncertaintyInMilliseconds: 500
+              }]
+              context.succeed(buildResponse(properties))
+            })
+          })
         }
       }
       break

@@ -176,7 +176,7 @@ Your Domoticz devices should now appear in Alexa!
 - TemperatureSensor (current temperature)
 
 ### Blinds
-- ModeController (open/close)
+- RangeController (position control with open/close presets)
 
 ### Locks
 - LockController
@@ -226,6 +226,11 @@ State reporting is configured with:
 
 ### Thermostats
 - "Alexa, set kitchen temperature to 20 degrees"
+
+### Blinds
+- "Alexa, open the bedroom blind"
+- "Alexa, close the living room blind"
+- "Alexa, set the office blind to 50 percent"
 
 ### Sensors
 - "Alexa, what's the temperature in the bedroom?"

@@ -25,6 +25,31 @@ module.exports = function (event, context, passBack) {
     }
     const devArray = devices.result || []
     console.log('Fetched', devArray.length, 'devices from Domoticz')
+    
+    // Parse Domoticz version
+    const appVersion = devices.app_version || ''
+    const versionMatch = appVersion.match(/(\d+)\.(\d+)/)
+    let isOldVersion = false
+    if (versionMatch) {
+      const year = parseInt(versionMatch[1])
+      const minor = parseInt(versionMatch[2])
+      console.log(`Domoticz version: ${appVersion}`)
+      
+      // Versions before 2025.2 had percentage support for "Blinds + Stop"
+      if (year < 2025 || (year === 2025 && minor < 2)) {
+        isOldVersion = true
+      } else if (year === 2025 && minor === 2) {
+        // For 2025.2, check build number if present
+        const buildMatch = appVersion.match(/build (\d+)/)
+        if (buildMatch) {
+          const build = parseInt(buildMatch[1])
+          isOldVersion = build < 16813
+        }
+        // If no build number, it's a release version (>= 16813)
+      }
+      console.log(`Domoticz blind behavior: ${isOldVersion ? 'old (Blinds + Stop has percentage)' : 'new (Blinds + Stop no percentage)'}`)
+    }
+    
     const linkedDevices = new Set() // Track devices that are linked and should be hidden
     
     // First pass: find linked setpoint/temperature pairs
@@ -126,8 +151,96 @@ module.exports = function (event, context, passBack) {
           }
           endpoints.push(endpoint)
         } else if (devType.startsWith('Light') || devType.startsWith('Color Switch')) {
-          // Check if this is a Selector switch (input selector, not a light)
-          if (setSwitch === 'Selector' && device.LevelNames) {
+          // Check if this is actually a blind (some blinds report as Light/Switch)
+          if (setSwitch && (setSwitch.includes('Blind') || setSwitch === 'Venetian Blinds EU' || setSwitch === 'Venetian Blinds US')) {
+            endpoint.displayCategories = ['INTERIOR_BLIND']
+            const hasStop = setSwitch.includes('Stop')
+            let hasPercentage = setSwitch.includes('Percentage') || setSwitch.includes('%')
+            // Before 2025.2 (build 16813), "Blinds + Stop" also had percentage support
+            if (!hasPercentage && setSwitch === 'Blinds + Stop' && isOldVersion) {
+              hasPercentage = true
+            }
+            
+            endpoint.capabilities = [
+              {
+                type: 'AlexaInterface',
+                interface: 'Alexa.RangeController',
+                version: '3',
+                instance: 'Blind.Lift',
+                capabilityResources: {
+                  friendlyNames: [
+                    { '@type': 'asset', value: { assetId: 'Alexa.Setting.Opening' } },
+                    { '@type': 'text', value: { text: 'Position', locale: 'en-US' } }
+                  ]
+                },
+                properties: {
+                  supported: [{ name: 'rangeValue' }],
+                  proactivelyReported: false,
+                  retrievable: hasPercentage
+                },
+                configuration: {
+                  supportedRange: { minimumValue: 0, maximumValue: 100, precision: 1 },
+                  presets: [
+                    {
+                      rangeValue: 0,
+                      presetResources: {
+                        friendlyNames: [
+                          { '@type': 'asset', value: { assetId: 'Alexa.Value.Close' } },
+                          { '@type': 'text', value: { text: 'Closed', locale: 'en-US' } }
+                        ]
+                      }
+                    },
+                    {
+                      rangeValue: 100,
+                      presetResources: {
+                        friendlyNames: [
+                          { '@type': 'asset', value: { assetId: 'Alexa.Value.Open' } },
+                          { '@type': 'text', value: { text: 'Open', locale: 'en-US' } }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                semantics: {
+                  actionMappings: [
+                    { '@type': 'ActionsToDirective', actions: ['Alexa.Actions.Close'], directive: { name: 'SetRangeValue', payload: { rangeValue: 0 } } },
+                    { '@type': 'ActionsToDirective', actions: ['Alexa.Actions.Open'], directive: { name: 'SetRangeValue', payload: { rangeValue: 100 } } },
+                    { '@type': 'ActionsToDirective', actions: ['Alexa.Actions.Lower'], directive: { name: 'AdjustRangeValue', payload: { rangeValueDelta: -10, rangeValueDeltaDefault: false } } },
+                    { '@type': 'ActionsToDirective', actions: ['Alexa.Actions.Raise'], directive: { name: 'AdjustRangeValue', payload: { rangeValueDelta: 10, rangeValueDeltaDefault: false } } }
+                  ],
+                  stateMappings: [
+                    { '@type': 'StatesToValue', states: ['Alexa.States.Closed'], value: 0 },
+                    { '@type': 'StatesToRange', states: ['Alexa.States.Open'], range: { minimumValue: 1, maximumValue: 100 } }
+                  ]
+                }
+              }
+            ]
+            
+            if (hasStop) {
+              endpoint.capabilities.push({
+                type: 'AlexaInterface',
+                interface: 'Alexa.PowerController',
+                version: '3',
+                properties: {
+                  supported: [{ name: 'powerState' }],
+                  proactivelyReported: false,
+                  retrievable: false
+                }
+              })
+            }
+            
+            endpoint.capabilities.push({
+              type: 'AlexaInterface',
+              interface: 'Alexa',
+              version: '3'
+            })
+            endpoint.cookie = {
+              maxDimLevel: device.MaxDimLevel,
+              switchis: setSwitch,
+              WhatAmI: 'blind'
+            }
+            endpoints.push(endpoint)
+          } else if (setSwitch === 'Selector' && device.LevelNames) {
             // Decode level names from base64
             const levelNamesDecoded = Buffer.from(device.LevelNames, 'base64').toString('utf-8')
             const modes = levelNamesDecoded.split('|')
@@ -279,35 +392,90 @@ module.exports = function (event, context, passBack) {
             }
             endpoints.push(endpoint)
           }
-        } else if (devType.startsWith('Blind') || devType.startsWith('RFY')) {
+        } else if (devType.startsWith('Blind') || devType.startsWith('RFY') || 
+                   (setSwitch && (setSwitch.includes('Blind') || setSwitch === 'Venetian Blinds EU' || setSwitch === 'Venetian Blinds US'))) {
           endpoint.displayCategories = ['INTERIOR_BLIND']
+          const hasStop = setSwitch && setSwitch.includes('Stop')
+          let hasPercentage = setSwitch && (setSwitch.includes('Percentage') || setSwitch.includes('%'))
+          // Before 2025.2 (build 16813), "Blinds + Stop" also had percentage support
+          if (!hasPercentage && setSwitch === 'Blinds + Stop' && isOldVersion) {
+            hasPercentage = true
+          }
+          
           endpoint.capabilities = [
             {
+              type: 'AlexaInterface',
+              interface: 'Alexa.RangeController',
+              version: '3',
+              instance: 'Blind.Lift',
+              capabilityResources: {
+                friendlyNames: [
+                  { '@type': 'asset', value: { assetId: 'Alexa.Setting.Opening' } },
+                  { '@type': 'text', value: { text: 'Position', locale: 'en-US' } }
+                ]
+              },
+              properties: {
+                supported: [{ name: 'rangeValue' }],
+                proactivelyReported: false,
+                retrievable: hasPercentage
+              },
+              configuration: {
+                supportedRange: { minimumValue: 0, maximumValue: 100, precision: 1 },
+                presets: [
+                  {
+                    rangeValue: 0,
+                    presetResources: {
+                      friendlyNames: [
+                        { '@type': 'asset', value: { assetId: 'Alexa.Value.Close' } },
+                        { '@type': 'text', value: { text: 'Closed', locale: 'en-US' } }
+                      ]
+                    }
+                  },
+                  {
+                    rangeValue: 100,
+                    presetResources: {
+                      friendlyNames: [
+                        { '@type': 'asset', value: { assetId: 'Alexa.Value.Open' } },
+                        { '@type': 'text', value: { text: 'Open', locale: 'en-US' } }
+                      ]
+                    }
+                  }
+                ]
+              },
+              semantics: {
+                actionMappings: [
+                  { '@type': 'ActionsToDirective', actions: ['Alexa.Actions.Close'], directive: { name: 'SetRangeValue', payload: { rangeValue: 0 } } },
+                  { '@type': 'ActionsToDirective', actions: ['Alexa.Actions.Open'], directive: { name: 'SetRangeValue', payload: { rangeValue: 100 } } },
+                  { '@type': 'ActionsToDirective', actions: ['Alexa.Actions.Lower'], directive: { name: 'AdjustRangeValue', payload: { rangeValueDelta: -10, rangeValueDeltaDefault: false } } },
+                  { '@type': 'ActionsToDirective', actions: ['Alexa.Actions.Raise'], directive: { name: 'AdjustRangeValue', payload: { rangeValueDelta: 10, rangeValueDeltaDefault: false } } }
+                ],
+                stateMappings: [
+                  { '@type': 'StatesToValue', states: ['Alexa.States.Closed'], value: 0 },
+                  { '@type': 'StatesToRange', states: ['Alexa.States.Open'], range: { minimumValue: 1, maximumValue: 100 } }
+                ]
+              }
+            }
+          ]
+          
+          if (hasStop) {
+            endpoint.capabilities.push({
               type: 'AlexaInterface',
               interface: 'Alexa.PowerController',
               version: '3',
               properties: {
                 supported: [{ name: 'powerState' }],
                 proactivelyReported: false,
-                retrievable: true
+                retrievable: false
               }
-            },
-            {
-              type: 'AlexaInterface',
-              interface: 'Alexa.PercentageController',
-              version: '3',
-              properties: {
-                supported: [{ name: 'percentage' }],
-                proactivelyReported: false,
-                retrievable: true
-              }
-            },
-            {
-              type: 'AlexaInterface',
-              interface: 'Alexa',
-              version: '3'
-            }
-          ]
+            })
+          }
+          
+          endpoint.capabilities.push({
+            type: 'AlexaInterface',
+            interface: 'Alexa',
+            version: '3'
+          })
+          
           endpoint.cookie = {
             maxDimLevel: device.MaxDimLevel,
             switchis: setSwitch,

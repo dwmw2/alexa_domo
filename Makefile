@@ -35,7 +35,7 @@ help:
 	@echo "  show-current-version - Show deployed Lambda version"
 	@echo ""
 	@echo "Testing:"
-	@echo "  test-discovery       - Test device discovery"
+	@echo "  test-discovery       - Test device discovery (use BEARER_TOKEN=xxx to specify JWT)"
 	@echo "  test-control         - Test device control"
 	@echo "  logs                 - Fetch recent CloudWatch logs"
 	@echo ""
@@ -176,7 +176,7 @@ lambda-status:
 
 test-discovery:
 	@echo "Testing device discovery..."
-	@echo '{"directive":{"header":{"namespace":"Alexa.Discovery","name":"Discover","payloadVersion":"3","messageId":"test"},"payload":{"scope":{"type":"BearerToken","token":"test"}}}}' > discovery-payload.json
+	@echo '{"directive":{"header":{"namespace":"Alexa.Discovery","name":"Discover","payloadVersion":"3","messageId":"test"},"payload":{"scope":{"type":"BearerToken","token":"$(BEARER_TOKEN)"}}}}' > discovery-payload.json
 	@aws lambda invoke \
 		--function-name $(FUNCTION_NAME) \
 		--payload file://discovery-payload.json \
