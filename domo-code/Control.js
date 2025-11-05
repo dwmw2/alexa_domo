@@ -525,7 +525,7 @@ module.exports = function (event, context) {
                 timeOfSample: new Date().toISOString(),
                 uncertaintyInMilliseconds: 500
               })
-              if (maxDimLevel) {
+              if (switchtype === 'Dimmer') {
                 properties.push({
                   namespace: 'Alexa.BrightnessController',
                   name: 'brightness',
@@ -624,6 +624,25 @@ module.exports = function (event, context) {
               }
             }
             context.succeed(buildReportStateResponse(properties))
+          })
+        } else if (what === 'scene') {
+          // Groups support state reporting, scenes don't
+          getDev(deviceId, 'scene', bearerToken, function (data) {
+            if (data !== 'Err' && data.Type === 'Group') {
+              // Groups can report their power state
+              const status = data.Status || 'Off'
+              properties.push({
+                namespace: 'Alexa.PowerController',
+                name: 'powerState',
+                value: status === 'Off' ? 'OFF' : 'ON',
+                timeOfSample: new Date().toISOString(),
+                uncertaintyInMilliseconds: 500
+              })
+              context.succeed(buildReportStateResponse(properties))
+            } else {
+              // Scenes don't support state reporting
+              context.succeed(buildErrorResponse('ErrorResponse', 'State report not supported for this device'))
+            }
           })
         } else {
           context.succeed(buildErrorResponse('ErrorResponse', 'State report not supported for this device'))

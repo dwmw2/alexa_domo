@@ -1,4 +1,4 @@
-.PHONY: help deploy create-function create-role add-alexa-permission lambda-status test-discovery test-control logs clean show-current-version zip
+.PHONY: help deploy create-function create-role add-alexa-permission lambda-status test-discovery test-statereport test-control logs clean show-current-version zip
 
 # Name of your Lambda function in AWS
 FUNCTION_NAME ?= domoticz-alexa
@@ -36,6 +36,7 @@ help:
 	@echo ""
 	@echo "Testing:"
 	@echo "  test-discovery       - Test device discovery (use BEARER_TOKEN=xxx to specify JWT)"
+	@echo "  test-statereport     - Test state report (requires ENDPOINT=xxx, optional BEARER_TOKEN=xxx)"
 	@echo "  test-control         - Test device control"
 	@echo "  logs                 - Fetch recent CloudWatch logs"
 	@echo ""
@@ -186,6 +187,27 @@ test-discovery:
 	@jq '.event.payload.endpoints | length' discovery-response.json | \
 		xargs -I {} echo "Discovered {} devices"
 	@jq -r '.event.payload.endpoints[].friendlyName' discovery-response.json | sort
+
+test-statereport:
+	@if [ -z "$(ENDPOINT)" ]; then \
+		echo "Error: ENDPOINT required. Usage: make test-statereport ENDPOINT=<endpointId> [BEARER_TOKEN=<token>]"; \
+		exit 1; \
+	fi
+	@echo "Testing state report for endpoint $(ENDPOINT)..."
+	@if [ ! -f discovery-response.json ]; then \
+		echo "Running discovery first to get device cookie..."; \
+		$(MAKE) test-discovery BEARER_TOKEN="$(BEARER_TOKEN)" > /dev/null 2>&1; \
+	fi
+	@COOKIE=$$(jq -c '.event.payload.endpoints[] | select(.endpointId == "$(ENDPOINT)") | .cookie' discovery-response.json 2>/dev/null || echo '{}'); \
+	echo "{\"directive\":{\"header\":{\"namespace\":\"Alexa\",\"name\":\"ReportState\",\"payloadVersion\":\"3\",\"messageId\":\"test\",\"correlationToken\":\"test\"},\"endpoint\":{\"scope\":{\"type\":\"BearerToken\",\"token\":\"$(BEARER_TOKEN)\"},\"endpointId\":\"$(ENDPOINT)\",\"cookie\":$$COOKIE},\"payload\":{}}}" > statereport-payload.json
+	@aws lambda invoke \
+		--function-name $(FUNCTION_NAME) \
+		--payload file://statereport-payload.json \
+		$(PROFILE_FLAG) \
+		--region $(AWS_REGION) \
+		statereport-response.json > /dev/null
+	@echo "Response:"
+	@jq '.' statereport-response.json
 
 test-control:
 	@echo "Testing device control (Study light on)..."

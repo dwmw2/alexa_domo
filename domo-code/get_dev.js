@@ -6,11 +6,16 @@ let log = require('./logger')
 module.exports = function (idx, devType, bearerToken, sendback) {
   let api = new Domoticz(bearerToken)
   
+  // Use different API endpoint for scenes
+  const apiCall = devType === 'scene' 
+    ? api.getScene.bind(api)
+    : api.getDevice.bind(api)
+  
   let intRet
-  api.getDevice({
+  apiCall({
     idx: idx
   }, function (err, data) {
-    if (err) return sendback(null)
+    if (err) return sendback('Err')
     
     let devArray = data.result
     if (devArray) {
@@ -18,6 +23,13 @@ module.exports = function (idx, devType, bearerToken, sendback) {
        console.log("device list", devArray)
       for (let i = 0; i < devArray.length; i++) {
         let device = devArray[i]
+        
+        // For scenes, return the whole device object
+        if (devType === 'scene') {
+          sendback(device)
+          return
+        }
+        
         let devName = device.Name
         if (device.Description !== '') {
           let regex = /Alexa_Name:\s*(.+)/im

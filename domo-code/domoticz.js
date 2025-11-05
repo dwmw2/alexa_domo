@@ -93,6 +93,23 @@ class Domoticz {
     this.request(`/json.htm?type=command&param=getdevices&rid=${params.idx}`, callback)
   }
 
+  getScene(params, callback) {
+    this.request(`/json.htm?type=command&param=getscenes`, (err, data) => {
+      if (err) return callback(err)
+      // Filter to find the specific scene by idx
+      if (data.result) {
+        const scene = data.result.find(s => s.idx === params.idx)
+        if (scene) {
+          callback(null, { result: [scene] })
+        } else {
+          callback(new Error('Scene not found'))
+        }
+      } else {
+        callback(new Error('No scenes returned'))
+      }
+    })
+  }
+
   getDevices(params, callback) {
     this.request('/json.htm?type=command&param=getdevices&filter=all&used=true', callback)
   }
